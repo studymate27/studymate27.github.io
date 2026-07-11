@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>스터디 메이트 - 실시간 동기화 현황판</title>
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
 <body class="bg-slate-50 text-slate-800 min-h-screen font-sans">
@@ -24,11 +24,9 @@
             
             <div class="flex gap-3 text-xs font-bold">
                 <div class="bg-amber-50 border border-amber-200 text-amber-800 px-3 py-2 rounded-xl flex items-center gap-1.5 shadow-xs">
-                    <span class="w-1.5 h-1.5 bg-amber-500 rounded-full"></span>
                     9월 모평: <span id="mopyung-dday" class="text-amber-600 font-extrabold text-sm">D-Day</span>
                 </div>
                 <div class="bg-rose-50 border border-rose-200 text-rose-800 px-3 py-2 rounded-xl flex items-center gap-1.5 shadow-xs">
-                    <span class="w-1.5 h-1.5 bg-rose-500 rounded-full animate-pulse"></span>
                     🔥 수능: <span id="suneung-dday" class="text-rose-600 font-extrabold text-sm">D-Day</span>
                 </div>
             </div>
@@ -50,8 +48,8 @@
                     <i class="fa-solid fa-chevron-right"></i>
                 </button>
             </div>
-            <span class="text-xs bg-emerald-100 text-emerald-800 font-bold px-3 py-1.5 rounded-full flex items-center gap-1.5 shadow-xs">
-                <span class="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></span> 실시간 동기화 서버 On
+            <span id="sync-status" class="text-xs bg-emerald-100 text-emerald-800 font-bold px-3 py-1.5 rounded-full flex items-center gap-1.5 shadow-xs">
+                <span class="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></span> 실시간 서버 On
             </span>
         </div>
 
@@ -59,11 +57,17 @@
     </main>
 
     <script>
-        // 🔗 주신 Supabase 주소 연동 완료!
         const SUPABASE_URL = "https://jgmrktikgxtivsedsvmz.supabase.co";
         const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpnbXJrdGlrZ3h0aXZzZWRzdm16Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM3NzM3MzQsImV4cCI6MjA5OTM0OTczNH0.cL2BOJGYFvKtFjNloDwJOd6OwgXoJ8d8PeI1MRadEXo";
         
-        const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        let supabaseClient = null;
+        try {
+            if (window.supabase && typeof window.supabase.createClient === 'function') {
+                supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+            }
+        } catch(e) {
+            console.error("Supabase 로드 실패:", e);
+        }
 
         let weekOffset = 0; 
         let currentWeekDates = [];
@@ -109,22 +113,30 @@
             const weekKey = getWeekStorageKey();
             document.getElementById('week-title').innerText = `${currentWeekDates[0].label.split('(')[0]} ~ ${currentWeekDates[6].label.split('(')[0]} 현황`;
 
-            let { data, error } = await supabase
-                .from('study_mate')
-                .select('*')
-                .eq('week_key', weekKey)
-                .order('created_at', { ascending: true });
+            // 🛠️ 안전장치 1: 서버 연결 실패 시 로컬 임시 데이터로 작동하게 하여 먹통 방지
+            if (!supabaseClient) {
+                fallbackToLocal();
+                return;
+            }
 
-            if (!error) {
-                // 이전 주차 멤버가 있고 새 주차 데이터가 비었을 때 인원 자동 이월 생성
-                if ((!data || data.length === 0) && weekOffset !== 0) {
-                    let { data: prevData } = await supabase.from('study_mate').select('*');
+            try {
+                let { data, error } = await supabaseClient
+                    .from('study_mate')
+                    .select('*')
+                    .eq('week_key', weekKey)
+                    .order('created_at', { ascending: true });
+
+                if (error) throw error;
+
+                if (!data || data.length === 0) {
+                    // 새 주차 진입 시 자동 이월
+                    let { data: prevData } = await supabaseClient.from('study_mate').select('*');
                     const uniqueNames = [...new Set(prevData?.map(p => p.name))];
                     
                     if(uniqueNames.length > 0) {
                         for(let name of uniqueNames) {
                             const template = prevData.find(p => p.name === name);
-                            await supabase.from('study_mate').insert([{
+                            await supabaseClient.from('study_mate').insert([{
                                 id: Date.now() + Math.floor(Math.random() * 1000),
                                 name: name,
                                 target_start_time: template.target_start_time,
@@ -133,7 +145,7 @@
                                 start_done_list: [false, false, false, false, false, false, false]
                             }]);
                         }
-                        let { data: reData } = await supabase.from('study_mate').select('*').eq('week_key', weekKey);
+                        let { data: reData } = await supabaseClient.from('study_mate').select('*').eq('week_key', weekKey);
                         serverData = reData || [];
                         renderApp();
                         return;
@@ -141,19 +153,40 @@
                 }
                 serverData = data || [];
                 renderApp();
+            } catch (err) {
+                console.error("서버 통신 에러 발생:", err);
+                // 🛠️ 안전장치 2: 서버 에러 발생 시 알림 상태를 바꾸고 로컬 모드로 전환
+                document.getElementById('sync-status').className = "text-xs bg-amber-100 text-amber-800 font-bold px-3 py-1.5 rounded-full flex items-center gap-1.5 shadow-xs";
+                document.getElementById('sync-status').innerHTML = `<span class="w-1.5 h-1.5 bg-amber-500 rounded-full"></span> 연결 지연 (로컬 구동 중)`;
+                fallbackToLocal();
             }
+        }
+
+        // 로컬 백업 구동 함수
+        function fallbackToLocal() {
+            const saved = localStorage.getItem(`local_backup_${getWeekStorageKey()}`);
+            serverData = saved ? JSON.parse(saved) : [];
+            renderApp();
+        }
+
+        function saveLocalBackup() {
+            localStorage.setItem(`local_backup_${getWeekStorageKey()}`, JSON.stringify(serverData));
         }
 
         function renderApp() {
             const container = document.getElementById('friends-container');
             container.innerHTML = '';
 
-            if (serverData.length === 0) {
+            if (!serverData || serverData.length === 0) {
                 container.innerHTML = `<div class="col-span-full text-center py-12 text-slate-400 font-medium">오른쪽 상단의 '친구 등록하기'를 눌러 실시간 공유 멤버를 추가해 보세요!</div>`;
                 return;
             }
 
             serverData.forEach(friend => {
+                // 안전장치: 데이터가 비어있을 경우 초기화
+                if(!friend.time_done_list) friend.time_done_list = [false, false, false, false, false, false, false];
+                if(!friend.start_done_list) friend.start_done_list = [false, false, false, false, false, false, false];
+
                 let timeSuccess = friend.time_done_list.filter(v => v === true).length;
                 let startSuccess = friend.start_done_list.filter(v => v === true).length;
                 let penalty = 0;
@@ -180,13 +213,11 @@
                                 <div>
                                     <div class="flex items-center gap-2">
                                         <h3 class="text-lg font-bold text-slate-900">${friend.name}</h3>
-                                        <button onclick="deleteFriend(${friend.id}, '${friend.name}')" class="text-xs text-slate-300 hover:text-rose-500 font-bold transition cursor-pointer p-0.5" title="멤버 삭제">
-                                            <i class="fa-solid fa-circle-xmark"></i>
-                                        </button>
+                                        <button onclick="deleteFriend(${friend.id}, '${friend.name}')" class="text-xs text-slate-300 hover:text-rose-500 font-bold transition cursor-pointer p-0.5"><i class="fa-solid fa-circle-xmark"></i></button>
                                     </div>
                                     <div class="text-xs text-slate-500 font-medium mt-1 flex items-center gap-1.5">
                                         <i class="fa-regular fa-clock text-indigo-500"></i>
-                                        목표 시작: <span class="text-slate-800 font-semibold">${friend.target_start_time} 까지</span>
+                                        목표: <span class="text-slate-800 font-semibold">${friend.target_start_time} 까지</span>
                                         <button onclick="editPersonalTarget(${friend.id}, '${friend.target_start_time}')" class="ml-1 text-[10px] text-indigo-600 font-bold underline cursor-pointer">변경</button>
                                     </div>
                                 </div>
@@ -196,20 +227,13 @@
                             </div>
 
                             <div class="grid grid-cols-2 gap-4 mb-6 bg-slate-50 p-4 rounded-xl border border-slate-100">
-                                <div>
-                                    <div class="flex justify-between text-xs font-bold text-slate-600 mb-1.5"><span>⏰ 공부 시간</span><span class="text-indigo-600">${timeProgress}%</span></div>
-                                    <div class="w-full bg-slate-200 h-2 rounded-full overflow-hidden"><div class="bg-indigo-600 h-full rounded-full" style="width: ${timeProgress}%"></div></div>
-                                </div>
-                                <div>
-                                    <div class="flex justify-between text-xs font-bold text-slate-600 mb-1.5"><span>🎯 시작 시간</span><span class="text-emerald-600">${targetProgress}%</span></div>
-                                    <div class="w-full bg-slate-200 h-2 rounded-full overflow-hidden"><div class="bg-emerald-500 h-full rounded-full" style="width: ${targetProgress}%"></div></div>
-                                </div>
+                                <div><div class="flex justify-between text-xs font-bold text-slate-600 mb-1.5"><span>⏰ 공부 시간</span><span class="text-indigo-600">${timeProgress}%</span></div><div class="w-full bg-slate-200 h-2 rounded-full overflow-hidden"><div class="bg-indigo-600 h-full rounded-full" style="width: ${timeProgress}%"></div></div></div>
+                                <div><div class="flex justify-between text-xs font-bold text-slate-600 mb-1.5"><span>🎯 시작 시간</span><span class="text-emerald-600">${targetProgress}%</span></div><div class="w-full bg-slate-200 h-2 rounded-full overflow-hidden"><div class="bg-emerald-500 h-full rounded-full" style="width: ${targetProgress}%"></div></div></div>
                             </div>
 
                             <div class="space-y-3">
                                 <div class="grid grid-cols-8 text-center text-[10px] font-bold text-slate-400 pb-1 border-b border-slate-100">
-                                    <div>구분</div>
-                                    ${currentWeekDates.map(d => `<div>${d.label}</div>`).join('')}
+                                    <div>구분</div>${currentWeekDates.map(d => `<div>${d.label}</div>`).join('')}
                                 </div>
                                 <div class="grid grid-cols-8 items-center text-center">
                                     <div class="text-[11px] font-bold text-slate-500 text-left">공부시간</div>
@@ -234,7 +258,7 @@
                             </div>
                         </div>
                         <div class="bg-rose-50 px-6 py-3.5 border-t border-rose-100 flex justify-between items-center">
-                            <span class="text-xs font-bold text-rose-700"><i class="fa-solid fa-triangle-exclamation mr-1"></i> 이번 주 누적 벌금</span>
+                            <span class="text-xs font-bold text-rose-700">이번 주 누적 벌금</span>
                             <span class="text-sm font-extrabold text-rose-700">${penalty.toLocaleString()}원</span>
                         </div>
                     </div>`;
@@ -245,16 +269,25 @@
         async function addNewFriend() {
             const name = prompt("새로운 친구 이름을 입력하세요:");
             if(!name) return;
-            const time = prompt("목표 시작 시간을 입력하세요 (예: 08:40):", "08:40");
+            const time = prompt("목표 시작 시간을 입력하세요:", "08:40");
             
-            await supabase.from('study_mate').insert([{
-                id: Date.now(),
-                name: name,
-                target_start_time: time,
-                week_key: getWeekStorageKey(),
-                time_done_list: [false, false, false, false, false, false, false],
-                start_done_list: [false, false, false, false, false, false, false]
-            }]);
+            if (supabaseClient) {
+                await supabaseClient.from('study_mate').insert([{
+                    id: Date.now(),
+                    name: name,
+                    target_start_time: time,
+                    week_key: getWeekStorageKey(),
+                    time_done_list: [false, false, false, false, false, false, false],
+                    start_done_list: [false, false, false, false, false, false, false]
+                }]);
+            } else {
+                serverData.push({
+                    id: Date.now(), name: name, target_start_time: time, week_key: getWeekStorageKey(),
+                    time_done_list: [false, false, false, false, false, false, false],
+                    start_done_list: [false, false, false, false, false, false, false]
+                });
+                saveLocalBackup();
+            }
             loadServerData();
         }
 
@@ -265,7 +298,12 @@
                 let newList = [...friend[listName]];
                 newList[index] = !currentVal;
 
-                await supabase.from('study_mate').update({ [listName]: newList }).eq('id', id);
+                if (supabaseClient) {
+                    await supabaseClient.from('study_mate').update({ [listName]: newList }).eq('id', id);
+                } else {
+                    friend[listName] = newList;
+                    saveLocalBackup();
+                }
                 loadServerData();
             }
         }
@@ -273,41 +311,51 @@
         async function setDayOff(id) {
             const friend = serverData.find(f => f.id === id);
             if(!friend) return;
-            const input = prompt("Day Off를 사용할 요일을 입력하세요 (월, 화, 수, 목, 금, 토, 일 중에서 입력)\n*해제하려면 빈칸 입력 후 확인:");
-            
-            let used = true;
-            let dayIndex = 6;
-            
+            const input = prompt("Day Off 요일 (월~일 / 해제는 빈칸):");
+            let used = true; let dayIndex = 6;
             if(!input || input.trim() === "") { used = false; } 
             else {
                 dayIndex = ["월", "화", "수", "목", "금", "토", "일"].indexOf(input.trim());
-                if(dayIndex === -1) { alert("요일을 정확하게 입력해 주세요. (예: 월)"); return; }
+                if(dayIndex === -1) { alert("요일이 잘못되었습니다."); return; }
             }
 
-            await supabase.from('study_mate').update({ day_off_used: used, day_off_day: dayIndex }).eq('id', id);
+            if (supabaseClient) {
+                await supabaseClient.from('study_mate').update({ day_off_used: used, day_off_day: dayIndex }).eq('id', id);
+            } else {
+                friend.day_off_used = used; friend.day_off_day = dayIndex; saveLocalBackup();
+            }
             loadServerData();
         }
 
         async function editPersonalTarget(id, currentTime) {
-            const newTime = prompt("변경할 목표 시작 시간을 입력하세요:", currentTime);
+            const newTime = prompt("변경할 목표 시간:", currentTime);
             if(!newTime) return;
-            await supabase.from('study_mate').update({ target_start_time: newTime }).eq('id', id);
+            if (supabaseClient) {
+                await supabaseClient.from('study_mate').update({ target_start_time: newTime }).eq('id', id);
+            } else {
+                const friend = serverData.find(f => f.id === id);
+                if(friend) { friend.target_start_time = newTime; saveLocalBackup(); }
+            }
             loadServerData();
         }
 
         async function deleteFriend(id, name) {
-            if(confirm(`정말로 '${name}' 님을 명단에서 삭제하시겠습니까?`)) {
-                await supabase.from('study_mate').delete().eq('id', id);
+            if(confirm(`'${name}' 님을 삭제할까요?`)) {
+                if (supabaseClient) {
+                    await supabaseClient.from('study_mate').delete().eq('id', id);
+                } else {
+                    serverData = serverData.filter(f => f.id !== id);
+                    saveLocalBackup();
+                }
                 loadServerData();
             }
         }
 
-        // 초기 구동
         updateDDays();
         currentWeekDates = getWeekDates(weekOffset);
         loadServerData();
 
-        // 🔄 5초마다 실시간으로 서버에서 새 데이터 긁어오기
+        // 🔄 5초 주기 연동
         setInterval(loadServerData, 5000);
     </script>
 </body>
