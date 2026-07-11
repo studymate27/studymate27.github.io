@@ -3,8 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>스터디 메이트 - 목표 달성 현황판</title>
+    <title>스터디 메이트 - 실시간 동기화 현황판</title>
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
 <body class="bg-slate-50 text-slate-800 min-h-screen font-sans">
@@ -21,7 +22,6 @@
                 </div>
             </div>
             
-            <!-- 🎯 D-Day 표시 영역 -->
             <div class="flex gap-3 text-xs font-bold">
                 <div class="bg-amber-50 border border-amber-200 text-amber-800 px-3 py-2 rounded-xl flex items-center gap-1.5 shadow-xs">
                     <span class="w-1.5 h-1.5 bg-amber-500 rounded-full"></span>
@@ -40,55 +40,50 @@
     </header>
 
     <main class="max-w-6xl mx-auto px-4 py-8">
-        <!-- 📅 주차 조절 컨트롤러 영역 -->
         <div class="flex justify-between items-center mb-8">
             <div class="flex items-center gap-2 bg-white px-2 py-1 rounded-xl border border-slate-200 shadow-xs">
                 <button onclick="changeWeek(-1)" class="p-2 hover:bg-slate-50 rounded-lg text-slate-500 hover:text-slate-800 transition cursor-pointer">
                     <i class="fa-solid fa-chevron-left"></i>
                 </button>
-                <h2 id="week-title" class="text-sm md:text-base font-bold text-slate-800 px-2 min-w-[180px] text-center">주차 불러오는 중...</h2>
+                <h2 id="week-title" class="text-sm md:text-base font-bold text-slate-800 px-2 min-w-[180px] text-center">주차 계산 중...</h2>
                 <button onclick="changeWeek(1)" class="p-2 hover:bg-slate-50 rounded-lg text-slate-500 hover:text-slate-800 transition cursor-pointer">
                     <i class="fa-solid fa-chevron-right"></i>
                 </button>
             </div>
             <span class="text-xs bg-emerald-100 text-emerald-800 font-bold px-3 py-1.5 rounded-full flex items-center gap-1.5 shadow-xs">
-                <span class="w-1.5 h-1.5 bg-emerald-500 rounded-full"></span> 주차별 자동 저장 On
+                <span class="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></span> 실시간 동기화 서버 On
             </span>
         </div>
 
-        <div id="friends-container" class="grid grid-cols-1 md:grid-cols-2 gap-8">
-            <!-- 친구 카드가 여기에 생성됩니다 -->
-        </div>
+        <div id="friends-container" class="grid grid-cols-1 md:grid-cols-2 gap-8"></div>
     </main>
 
     <script>
-        // 1. 🎯 D-Day 계산 및 표시 함수
+        // 🔗 주신 Supabase 주소 연동 완료!
+        const SUPABASE_URL = "https://jgmrktikgxtivsedsvmz.supabase.co";
+        const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpnbXJrdGlrZ3h0aXZzZWRzdm16Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM3NzM3MzQsImV4cCI6MjA5OTM0OTczNH0.cL2BOJGYFvKtFjNloDwJOd6OwgXoJ8d8PeI1MRadEXo";
+        
+        const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+        let weekOffset = 0; 
+        let currentWeekDates = [];
+        let serverData = [];
+
         function updateDDays() {
             const today = new Date();
             const mopyungDate = new Date("2026-09-03T00:00:00");
             const suneungDate = new Date("2026-11-19T00:00:00");
-            
-            const diffMopyung = mopyungDate - today;
-            const diffSuneung = suneungDate - today;
-            
-            const ddayMopyung = Math.ceil(diffMopyung / (1000 * 60 * 60 * 24));
-            const ddaySuneung = Math.ceil(diffSuneung / (1000 * 60 * 60 * 24));
-            
-            document.getElementById('mopyung-dday').innerText = ddayMopyung === 0 ? "D-Day" : ddayMopyung > 0 ? `D-${ddayMopyung}` : `D+${Math.abs(ddayMopyung)}`;
-            document.getElementById('suneung-dday').innerText = ddaySuneung === 0 ? "D-Day" : ddaySuneung > 0 ? `D-${ddaySuneung}` : `D+${Math.abs(ddaySuneung)}`;
+            const ddayMopyung = Math.ceil((mopyungDate - today) / (1000 * 60 * 60 * 24));
+            const ddaySuneung = Math.ceil((suneungDate - today) / (1000 * 60 * 60 * 24));
+            document.getElementById('mopyung-dday').innerText = ddayMopyung > 0 ? `D-${ddayMopyung}` : `D+${Math.abs(ddayMopyung)}`;
+            document.getElementById('suneung-dday').innerText = ddaySuneung > 0 ? `D-${ddaySuneung}` : `D+${Math.abs(ddaySuneung)}`;
         }
-
-        // 2. 📅 현재 선택된 주차 기준 일주일 날짜 계산
-        let weekOffset = 0; 
-        let currentWeekDates = [];
 
         function getWeekDates(offset) {
             const current = new Date();
             current.setDate(current.getDate() + (offset * 7));
-            
             const distanceToMonday = (current.getDay() === 0 ? 7 : current.getDay()) - 1;
             const monday = new Date(current.setDate(current.getDate() - distanceToMonday));
-            
             const days = ["월", "화", "수", "목", "금", "토", "일"];
             return days.map((day, idx) => {
                 const nextDay = new Date(monday);
@@ -100,83 +95,65 @@
             });
         }
 
-        // 주차 변경 함수 (◀, ▶ 버튼 클릭 시)
+        function getWeekStorageKey() {
+            return `week_${currentWeekDates[0].storageKey}`;
+        }
+
         function changeWeek(direction) {
             weekOffset += direction;
             currentWeekDates = getWeekDates(weekOffset);
-            loadDataForCurrentWeek();
+            loadServerData();
         }
 
-        // 3. 주차별 데이터 로드 및 관리 시스템
-        let localData = [];
+        async function loadServerData() {
+            const weekKey = getWeekStorageKey();
+            document.getElementById('week-title').innerText = `${currentWeekDates[0].label.split('(')[0]} ~ ${currentWeekDates[6].label.split('(')[0]} 현황`;
 
-        function getWeekStorageKey() {
-            return `study_mate_data_week_${currentWeekDates[0].storageKey}`;
-        }
+            let { data, error } = await supabase
+                .from('study_mate')
+                .select('*')
+                .eq('week_key', weekKey)
+                .order('created_at', { ascending: true });
 
-        function loadDataForCurrentWeek() {
-            try {
-                const key = getWeekStorageKey();
-                const titleElement = document.getElementById('week-title');
-                titleElement.innerText = `${currentWeekDates[0].label.split('(')[0]} ~ ${currentWeekDates[6].label.split('(')[0]} 현황`;
-
-                const saved = localStorage.getItem(key);
-                if (saved) {
-                    localData = JSON.parse(saved);
-                } else {
-                    // 🛠️ 안전 보수 완료: 에러 유발 가능성이 높은 루프 문을 안전하게 방어 처리
-                    let baseMembers = [];
-                    for(let i = 0; i < localStorage.length; i++) {
-                        const storageKey = localStorage.key(i);
-                        if(storageKey && storageKey.startsWith('study_mate_data_week_')) {
-                            try {
-                                const parsed = JSON.parse(localStorage.getItem(storageKey));
-                                if (Array.isArray(parsed) && parsed.length > 0) {
-                                    baseMembers = parsed;
-                                    break;
-                                }
-                            } catch(e) { continue; }
-                        }
-                    }
+            if (!error) {
+                // 이전 주차 멤버가 있고 새 주차 데이터가 비었을 때 인원 자동 이월 생성
+                if ((!data || data.length === 0) && weekOffset !== 0) {
+                    let { data: prevData } = await supabase.from('study_mate').select('*');
+                    const uniqueNames = [...new Set(prevData?.map(p => p.name))];
                     
-                    if(baseMembers && baseMembers.length > 0) {
-                        localData = baseMembers.map(m => ({
-                            id: m.id || Date.now() + Math.random(),
-                            name: m.name || "이름 없음",
-                            target_start_time: m.target_start_time || "08:40",
-                            day_off_used: false,
-                            day_off_day: 6,
-                            time_done_list: [false, false, false, false, false, false, false],
-                            start_done_list: [false, false, false, false, false, false, false]
-                        }));
-                    } else {
-                        localData = []; 
+                    if(uniqueNames.length > 0) {
+                        for(let name of uniqueNames) {
+                            const template = prevData.find(p => p.name === name);
+                            await supabase.from('study_mate').insert([{
+                                id: Date.now() + Math.floor(Math.random() * 1000),
+                                name: name,
+                                target_start_time: template.target_start_time,
+                                week_key: weekKey,
+                                time_done_list: [false, false, false, false, false, false, false],
+                                start_done_list: [false, false, false, false, false, false, false]
+                            }]);
+                        }
+                        let { data: reData } = await supabase.from('study_mate').select('*').eq('week_key', weekKey);
+                        serverData = reData || [];
+                        renderApp();
+                        return;
                     }
-                    localStorage.setItem(key, JSON.stringify(localData));
                 }
-            } catch (error) {
-                console.error("데이터 로드 중 오류 발생:", error);
-                localData = [];
+                serverData = data || [];
+                renderApp();
             }
-            renderApp();
         }
 
-        function saveData() {
-            localStorage.setItem(getWeekStorageKey(), JSON.stringify(localData));
-            renderApp();
-        }
-
-        // 4. 화면 렌더링 함수
         function renderApp() {
             const container = document.getElementById('friends-container');
             container.innerHTML = '';
 
-            if (!localData || localData.length === 0) {
-                container.innerHTML = `<div class="col-span-full text-center py-12 text-slate-400 font-medium">오른쪽 상단의 '친구 등록하기'를 눌러 멤버를 추가해 보세요!</div>`;
+            if (serverData.length === 0) {
+                container.innerHTML = `<div class="col-span-full text-center py-12 text-slate-400 font-medium">오른쪽 상단의 '친구 등록하기'를 눌러 실시간 공유 멤버를 추가해 보세요!</div>`;
                 return;
             }
 
-            localData.forEach(friend => {
+            serverData.forEach(friend => {
                 let timeSuccess = friend.time_done_list.filter(v => v === true).length;
                 let startSuccess = friend.start_done_list.filter(v => v === true).length;
                 let penalty = 0;
@@ -197,7 +174,7 @@
                 let dayOffText = friend.day_off_used && friend.day_off_day !== undefined ? daysKorean[friend.day_off_day] : "미사용";
 
                 let cardHtml = `
-                    <div class="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden flex flex-col justify-between relative group">
+                    <div class="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden flex flex-col justify-between relative">
                         <div class="p-6">
                             <div class="flex justify-between items-start mb-6">
                                 <div>
@@ -265,73 +242,73 @@
             });
         }
 
-        function deleteFriend(id, name) {
-            if(confirm(`정말로 '${name}' 님을 명단에서 삭제하시겠습니까?`)) {
-                localData = localData.filter(f => f.id !== id);
-                saveData();
-            }
-        }
-
-        function addNewFriend() {
+        async function addNewFriend() {
             const name = prompt("새로운 친구 이름을 입력하세요:");
             if(!name) return;
             const time = prompt("목표 시작 시간을 입력하세요 (예: 08:40):", "08:40");
             
-            localData.push({
+            await supabase.from('study_mate').insert([{
                 id: Date.now(),
                 name: name,
                 target_start_time: time,
-                day_off_used: false,
-                day_off_day: 6,
+                week_key: getWeekStorageKey(),
                 time_done_list: [false, false, false, false, false, false, false],
                 start_done_list: [false, false, false, false, false, false, false]
-            });
-            saveData();
+            }]);
+            loadServerData();
         }
 
-        function editPersonalTarget(id, currentTime) {
-            const newTime = prompt("변경할 목표 시작 시간을 입력하세요:", currentTime);
-            if(!newTime) return;
-            const friend = localData.find(f => f.id === id);
-            if(friend) friend.target_start_time = newTime;
-            saveData();
-        }
-
-        function setDayOff(id) {
-            const friend = localData.find(f => f.id === id);
-            if(!friend) return;
-
-            const input = prompt("Day Off를 사용할 요일을 입력하세요 (월, 화, 수, 목, 금, 토, 일 중에서 입력)\n*해제하려면 빈칸 입력 후 확인:");
-            
-            if(!input || input.trim() === "") {
-                friend.day_off_used = false;
-            } else {
-                const days = ["월", "화", "수", "목", "금", "토", "일"];
-                const dayIndex = days.indexOf(input.trim());
-                
-                if(dayIndex === -1) {
-                    alert("요일을 정확하게 입력해 주세요. (예: 월)");
-                    return;
-                }
-                friend.day_off_used = true;
-                friend.day_off_day = dayIndex;
-            }
-            saveData();
-        }
-
-        function toggleCheck(id, index, listName, currentVal) {
-            const friend = localData.find(f => f.id === id);
+        async function toggleCheck(id, index, listName, currentVal) {
+            const friend = serverData.find(f => f.id === id);
             if(friend) {
                 if(friend.day_off_used && friend.day_off_day === index) return;
-                friend[listName][index] = !currentVal;
-                saveData();
+                let newList = [...friend[listName]];
+                newList[index] = !currentVal;
+
+                await supabase.from('study_mate').update({ [listName]: newList }).eq('id', id);
+                loadServerData();
             }
         }
 
-        // 초기 구동 순서 강제
+        async function setDayOff(id) {
+            const friend = serverData.find(f => f.id === id);
+            if(!friend) return;
+            const input = prompt("Day Off를 사용할 요일을 입력하세요 (월, 화, 수, 목, 금, 토, 일 중에서 입력)\n*해제하려면 빈칸 입력 후 확인:");
+            
+            let used = true;
+            let dayIndex = 6;
+            
+            if(!input || input.trim() === "") { used = false; } 
+            else {
+                dayIndex = ["월", "화", "수", "목", "금", "토", "일"].indexOf(input.trim());
+                if(dayIndex === -1) { alert("요일을 정확하게 입력해 주세요. (예: 월)"); return; }
+            }
+
+            await supabase.from('study_mate').update({ day_off_used: used, day_off_day: dayIndex }).eq('id', id);
+            loadServerData();
+        }
+
+        async function editPersonalTarget(id, currentTime) {
+            const newTime = prompt("변경할 목표 시작 시간을 입력하세요:", currentTime);
+            if(!newTime) return;
+            await supabase.from('study_mate').update({ target_start_time: newTime }).eq('id', id);
+            loadServerData();
+        }
+
+        async function deleteFriend(id, name) {
+            if(confirm(`정말로 '${name}' 님을 명단에서 삭제하시겠습니까?`)) {
+                await supabase.from('study_mate').delete().eq('id', id);
+                loadServerData();
+            }
+        }
+
+        // 초기 구동
         updateDDays();
         currentWeekDates = getWeekDates(weekOffset);
-        loadDataForCurrentWeek();
+        loadServerData();
+
+        // 🔄 5초마다 실시간으로 서버에서 새 데이터 긁어오기
+        setInterval(loadServerData, 5000);
     </script>
 </body>
 </html>
