@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>스터디 메이트 - 목표 달성 현황판</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen font-sans">
+
+    <header class="bg-white shadow-sm border-b border-slate-200 sticky top-0 z-50">
+        <div class="max-w-6xl mx-auto px-4 py-4 flex flex-col md:flex-row justify-between items-center gap-4">
+            <div class="flex items-center gap-3">
+                <div class="bg-indigo-600 text-white p-2.5 rounded-xl shadow-md shadow-indigo-100">
+                    <i class="fa-solid fa-graduation-cap text-xl"></i>
+                </div>
+                <div>
+                    <h1 class="text-xl font-bold text-slate-900 tracking-tight">Study Mate Sync</h1>
+                    <p class="text-xs text-slate-500 font-medium">우리들의 실시간 목표 및 벌금 정산소</p>
+                </div>
+            </div>
+            
+            <div class="flex gap-3 text-xs font-bold">
+                <div class="bg-amber-50 border border-amber-200 text-amber-800 px-3 py-2 rounded-xl flex items-center gap-1.5 shadow-xs">
+                    <span class="w-1.5 h-1.5 bg-amber-500 rounded-full"></span>
+                    9월 모평: <span id="mopyung-dday" class="text-amber-600 font-extrabold text-sm">D-Day</span>
+                </div>
+                <div class="bg-rose-50 border border-rose-200 text-rose-800 px-3 py-2 rounded-xl flex items-center gap-1.5 shadow-xs">
+                    <span class="w-1.5 h-1.5 bg-rose-500 rounded-full animate-pulse"></span>
+                    🔥 수능: <span id="suneung-dday" class="text-rose-600 font-extrabold text-sm">D-Day</span>
+                </div>
+            </div>
+
+            <button onclick="addNewFriend()" class="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-4 py-2 rounded-xl transition shadow-sm cursor-pointer">
+                <i class="fa-solid fa-user-plus mr-1"></i> 친구 등록하기
+            </button>
+        </div>
+    </header>
+
+    <main class="max-w-6xl mx-auto px-4 py-8">
+        <div class="flex justify-between items-center mb-8">
+            <div class="flex items-center gap-2 bg-white px-2 py-1 rounded-xl border border-slate-200 shadow-xs">
+                <button onclick="changeWeek(-1)" class="p-2 hover:bg-slate-50 rounded-lg text-slate-500 hover:text-slate-800 transition cursor-pointer">
+                    <i class="fa-solid fa-chevron-left"></i>
+                </button>
+                <h2 id="week-title" class="text-sm md:text-base font-bold text-slate-800 px-2 min-w-[180px] text-center">주차 불러오는 중...</h2>
+                <button onclick="changeWeek(1)" class="p-2 hover:bg-slate-50 rounded-lg text-slate-500 hover:text-slate-800 transition cursor-pointer">
+                    <i class="fa-solid fa-chevron-right"></i>
+                </button>
+            </div>
+            <span class="text-xs bg-emerald-100 text-emerald-800 font-bold px-3 py-1.5 rounded-full flex items-center gap-1.5 shadow-xs">
+                <span class="w-1.5 h-1.5 bg-emerald-500 rounded-full"></span> 주차별 자동 저장 On
+            </span>
+        </div>
+
+        <div id="friends-container" class="grid grid-cols-1 md:grid-cols-2 gap-8">
+            </div>
+    </main>
+
+    <script>
+        // 1. 🎯 D-Day 계산 및 표시 함수
+        function updateDDays() {
+            const today = new Date();
+            
+            const mopyungDate = new Date("2026-09-03T00:00:00");
+            const suneungDate = new Date("2026-11-19T00:00:00");
+            
+            const diffMopyung = mopyungDate - today;
+            const diffSuneung = suneungDate - today;
+            
+            const ddayMopyung = Math.ceil(diffMopyung / (1000 * 60 * 60 * 24));
+            const ddaySuneung = Math.ceil(diffSuneung / (1000 * 60 * 60 * 24));
+            
+            document.getElementById('mopyung-dday').innerText = ddayMopyung === 0 ? "D-Day" : ddayMopyung > 0 ? `D-${ddayMopyung}` : `D+${Math.abs(ddayMopyung)}`;
+            document.getElementById('suneung-dday').innerText = ddaySuneung === 0 ? "D-Day" : ddaySuneung > 0 ? `D-${ddaySuneung}` : `D+${Math.abs(ddaySuneung)}`;
+        }
+
+        // 2. 📅 현재 선택된 주차 기준 일주일 날짜 계산
+        let weekOffset = 0; // 0이면 이번 주, -1이면 지난 주, 1이면 다음 주
+
+        function getWeekDates(offset) {
+            const current = new Date();
+            // offset 주만큼 날짜를 더하거나 뺌
+            current.setDate(current.getDate() + (offset * 7));
+            
+            const distanceToMonday = (current.getDay() === 0 ? 7 : current.getDay()) - 1;
+            const monday = new Date(current.setDate(current.getDate() - distanceToMonday));
+            
+            const days = ["월", "화", "수", "목", "금", "토", "일"];
+            return days.map((day, idx) => {
+                const nextDay = new Date(monday);
+                nextDay.setDate(monday.getDate() + idx);
+                return {
+                    label: `${nextDay.getMonth() + 1}/${nextDay.getDate()}(${day})`,
+                    storageKey: `${nextDay.getFullYear()}-${nextDay.getMonth() + 1}-${nextDay.getDate()}`
+                };
+            });
+        }
+
+        let currentWeekDates = getWeekDates(weekOffset);
+
+        // 주차 변경 함수 (◀, ▶ 버튼 클릭 시)
+        function changeWeek(direction) {
+            weekOffset += direction;
+            currentWeekDates = getWeekDates(weekOffset);
+            loadDataForCurrentWeek();
+            renderApp();
+        }
+
+        // 3. 주차별 데이터 로드 및 관리 시스템
+        let localData = [];
+
+        // 주차 고유의 저장 Key 생성 (해당 주차 월요일 날짜 기준)
+        function getWeekStorageKey() {
+            return `study_mate_data_week_${currentWeekDates[0].storageKey}`;
+        }
+
+        function loadDataForCurrentWeek() {
+            const key = getWeekStorageKey();
+            const titleElement = document.getElementById('week-title');
+            titleElement.innerText = `${currentWeekDates[0].label.split('(')[0]} ~ ${currentWeekDates[6].label.split('(')[0]} 현황`;
+
+            // 해당 주차에 저장된 데이터가 있으면 가져오고, 없으면 지난 주 인원 명단만 복사해서 새로 생성
+            const saved = localStorage.getItem(key);
+            if (saved) {
+                localData = JSON.parse(saved);
+            } else {
+                // 명단 유지를 위해 가장 최근에 사용했던 명단(인원)을 탐색하여 가져옴
+                let baseMembers = [];
+                for(let i=0; i<localStorage.length; i++) {
+                    if(localStorage.key(i).startsWith('study_mate_data_week_')) {
+                        baseMembers = JSON.parse(localStorage.getItem(localStorage.key(i)));
+                        break;
+                    }
+                }
+                
+                if(baseMembers.length > 0) {
+                    // 명단은 유지하되 체크박스와 Dayoff는 깨끗하게 리셋
+                    localData = baseMembers.map(m => ({
+                        id: m.id,
+                        name: m.name,
+                        target_start_time: m.target_start_time,
+                        day_off_used: false,
+                        day_off_day: 6,
+                        time_done_list: [false, false, false, false, false, false, false],
+                        start_done_list: [false, false, false, false, false, false, false]
+                    }));
+                } else {
+                    // 완전 최초 사용자용 기본 샘플 데이터
+                    localData = [
+                        {
+                            id: 1,
+                            name: "나 (예시용)",
+                            target_start_time: "08:40",
+                            day_off_used: true,
+                            day_off_day: 6,
+                            time_done_list: [false, false, false, false, false, false, false],
+                            start_done_list: [false, false, false, false, false, false, false]
+                        }
+                    ];
+                }
+                saveData();
+            }
+        }
+
+        function saveData() {
+            localStorage.setItem(getWeekStorageKey(), JSON.stringify(localData));
+            renderApp();
+        }
+
+        // 4. 화면 렌더링 함수
+        function renderApp() {
+            const container = document.getElementById('friends-container');
+            container.innerHTML = '';
+
+            if (localData.length === 0) {
+                container.innerHTML = `<div class="col-span-full text-center py-12 text-slate-400 font-medium">상단의 '친구 등록하기'를 눌러 멤버를 추가해 보세요!</div>`;
+                return;
+            }
+
+            localData.forEach(friend => {
+                let timeSuccess = friend.time_done_list.filter(v => v === true).length;
+                let startSuccess = friend.start_done_list.filter(v => v === true).length;
+                let penalty = 0;
+
+                friend.time_done_list.forEach((v, idx) => {
+                    if (friend.day_off_used && friend.day_off_day === idx) return; 
+                    if (!v) penalty += 500;
+                });
+                friend.start_done_list.forEach((v, idx) => {
+                    if (friend.day_off_used && friend.day_off_day === idx) return;
+                    if (!v) penalty += 500;
+                });
+
+                let timeProgress = Math.round((timeSuccess / 7) * 100);
+                let targetProgress = Math.round((startSuccess / 7) * 100);
+
+                const daysKorean = ["월요일", "화요일", "수요일", "목요일", "금요일", "토요일", "일요일"];
+                let dayOffText = friend.day_off_used && friend.day_off_day !== undefined ? daysKorean[friend.day_off_day] : "미사용";
+
+                let cardHtml = `
+                    <div class="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden flex flex-col justify-between relative group">
+                        <div class="p-6">
+                            <div class="flex justify-between items-start mb-6">
+                                <div>
+                                    <div class="flex items-center gap-2">
+                                        <h3 class="text-lg font-bold text-slate-900">${friend.name}</h3>
+                                        <button onclick="deleteFriend(${friend.id}, '${friend.name}')" class="text-xs text-slate-300 hover:text-rose-500 font-bold transition cursor-pointer p-0.5" title="멤버 삭제">
+                                            <i class="fa-solid fa-circle-xmark"></i>
+                                        </button>
+                                    </div>
+                                    <div class="text-xs text-slate-500 font-medium mt-1 flex items-center gap-1.5">
+                                        <i class="fa-regular fa-clock text-indigo-500"></i>
+                                        목표 시작: <span class="text-slate-800 font-semibold">${friend.target_start_time} 까지</span>
+                                        <button onclick="editPersonalTarget(${friend.id}, '${friend.target_start_time}')" class="ml-1 text-[10px] text-indigo-600 font-bold underline cursor-pointer">변경</button>
+                                    </div>
+                                </div>
+                                <button onclick="setDayOff(${friend.id})" class="text-xs font-bold px-3 py-1.5 rounded-xl border transition cursor-pointer ${friend.day_off_used ? 'bg-amber-100 border-amber-200 text-amber-800' : 'bg-white border-slate-200 text-slate-600'}">
+                                    <i class="fa-solid fa-cloud text-[11px] mr-1"></i> Day Off: ${dayOffText}
+                                </button>
+                            </div>
+
+                            <div class="grid grid-cols-2 gap-4 mb-6 bg-slate-50 p-4 rounded-xl border border-slate-100">
+                                <div>
+                                    <div class="flex justify-between text-xs font-bold text-slate-600 mb-1.5"><span>⏰ 공부 시간</span><span class="text-indigo-600">${timeProgress}%</span></div>
+                                    <div class="w-full bg-slate-200 h-2 rounded-full overflow-hidden"><div class="bg-indigo-600 h-full rounded-full" style="width: ${timeProgress}%"></div></div>
+                                </div>
+                                <div>
+                                    <div class="flex justify-between text-xs font-bold text-slate-600 mb-1.5"><span>🎯 목표 달성률</span><span class="text-emerald-600">${targetProgress}%</span></div>
+                                    <div class="w-full bg-slate-200 h-2 rounded-full overflow-hidden"><div class="bg-emerald-500 h-full rounded-full" style="width: ${targetProgress}%"></div></div>
+                                </div>
+                            </div>
+
+                            <div class="space-y-3">
+                                <div class="grid grid-cols-8 text-center text-[10px] font-bold text-slate-400 pb-1 border-b border-slate-100">
+                                    <div>구분</div>
+                                    ${currentWeekDates.map(d => `<div>${d.label}</div>`).join('')}
+                                </div>
+                                <div class="grid grid-cols-8 items-center text-center">
+                                    <div class="text-[11px] font-bold text-slate-500 text-left">공부시간</div>
+                                    ${friend.time_done_list.map((v, idx) => `
+                                        <div class="flex justify-center">
+                                            <button onclick="toggleCheck(${friend.id}, ${idx}, 'time_done_list', ${v})" class="w-6 h-6 rounded-md flex items-center justify-center border text-xs cursor-pointer ${friend.day_off_used && friend.day_off_day === idx ? 'bg-amber-100 border-amber-100 text-amber-600' : v ? 'bg-indigo-50 border-indigo-200 text-indigo-600 font-bold' : 'bg-white border-slate-200'}">
+                                                ${friend.day_off_used && friend.day_off_day === idx ? '☁️' : v ? 'O' : 'X'}
+                                            </button>
+                                        </div>
+                                    `).join('')}
+                                </div>
+                                <div class="grid grid-cols-8 items-center text-center">
+                                    <div class="text-[11px] font-bold text-slate-500 text-left">시작시간</div>
+                                    ${friend.start_done_list.map((v, idx) => `
+                                        <div class="flex justify-center">
+                                            <button onclick="toggleCheck(${friend.id}, ${idx}, 'start_done_list', ${v})" class="w-6 h-6 rounded-md flex items-center justify-center border text-xs cursor-pointer ${friend.day_off_used && friend.day_off_day === idx ? 'bg-amber-100 border-amber-100 text-amber-600' : v ? 'bg-emerald-50 border-emerald-200 text-emerald-600 font-bold' : 'bg-white border-slate-200'}">
+                                                ${friend.day_off_used && friend.day_off_day === idx ? '☁️' : v ? 'O' : 'X'}
+                                            </button>
+                                        </div>
+                                    `).join('')}
+                                </div>
+                            </div>
+                        </div>
+                        <div class="bg-rose-50 px-6 py-3.5 border-t border-rose-100 flex justify-between items-center">
+                            <span class="text-xs font-bold text-rose-700"><i class="fa-solid fa-triangle-exclamation mr-1"></i> 이번 주 누적 벌금</span>
+                            <span class="text-sm font-extrabold text-rose-700">${penalty.toLocaleString()}원</span>
+                        </div>
+                    </div>`;
+                container.innerHTML += cardHtml;
+            });
+        }
+
+        // ❌ 친구 삭제 기능
+        function deleteFriend(id, name) {
+            if(confirm(`정말로 '${name}' 님을 명단에서 삭제하시겠습니까?\n(이번 주차 기록이 삭제됩니다.)`)) {
+                localData = localData.filter(f => f.id !== id);
+                saveData();
+            }
+        }
+
+        function addNewFriend() {
+            const name = prompt("새로운 친구 이름을 입력하세요:");
+            if(!name) return;
+            const time = prompt("목표 시작 시간을 입력하세요 (예: 08:40):", "08:40");
+            
+            localData.push({
+                id: Date.now(),
+                name: name,
+                target_start_time: time,
+                day_off_used: false,
+                day_off_day: 6,
+                time_done_list: [false, false, false, false, false, false, false],
+                start_done_list: [false, false, false, false, false, false, false]
+            });
+            saveData();
+        }
+
+        function editPersonalTarget(id, currentTime) {
+            const newTime = prompt("변경할 목표 시작 시간을 입력하세요:", currentTime);
+            if(!newTime) return;
+            const friend = localData.find(f => f.id === id);
+            if(friend) friend.target_start_time = newTime;
+            saveData();
+        }
+
+        function setDayOff(id) {
+            const friend = localData.find(f => f.id === id);
+            if(!friend) return;
+
+            const input = prompt("Day Off를 사용할 요일을 입력하세요 (월, 화, 수, 목, 금, 토, 일 중에서 입력)\n*해제하려면 빈칸 입력 후 확인:");
+            
+            if(!input || input.trim() === "") {
+                friend.day_off_used = false;
+            } else {
+                const days = ["월", "화", "수", "목", "금", "토", "일"];
+                const dayIndex = days.indexOf(input.trim());
+                
+                if(dayIndex === -1) {
+                    alert("요일을 정확하게 입력해 주세요. (예: 월)");
+                    return;
+                }
+                friend.day_off_used = true;
+                friend.day_off_day = dayIndex;
+            }
+            saveData();
+        }
+
+        function toggleCheck(id, index, listName, currentVal) {
+            const friend = localData.find(f => f.id === id);
+            if(friend) {
+                if(friend.day_off_used && friend.day_off_day === index) return;
+                friend[listName][index] = !currentVal;
+                saveData();
+            }
+        }
+
+        // 초기화 코드 실행
+        updateDDays();
+        loadDataForCurrentWeek();
+    </script>
+</body>
+</html>
