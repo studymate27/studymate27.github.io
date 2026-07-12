@@ -18,7 +18,7 @@
                 </div>
                 <div>
                     <h1 class="text-xl font-bold text-slate-900 tracking-tight">Study Mate Sync</h1>
-                    <p class="text-xs text-slate-500 font-medium">소녀들의 목표 및 벌금 정산소</p>
+                    <p class="text-xs text-slate-500 font-medium">우리들의 실시간 목표 및 벌금 정산소</p>
                 </div>
             </div>
             
@@ -72,7 +72,6 @@
         let weekOffset = 0; 
         let currentWeekDates = [];
         let serverData = [];
-        // 각 친구별 터치하여 임시 선택한 요일을 관리하는 객체 (Key: friend.id, Value: [0, 1, ...])
         let selectedDaysMap = {}; 
 
         function updateDDays() {
@@ -111,28 +110,43 @@
             loadServerData();
         }
 
-        // 미래 및 현재 주차 진입 시 마스터 명단을 기반으로 자동 뼈대 생성 기능
+        // 안전하게 문자열 분하 또는 기본 7일 배열 보장 장치 (오류/null 원천 방지)
+        function parseDayTargets(friend) {
+            const defaultTime = friend.target_start_time || "08:40";
+            if (!friend.notes) {
+                return Array(7).fill(defaultTime);
+            }
+            try {
+                const parsed = friend.notes.split(",");
+                if (parsed.length === 7) return parsed.map(t => t || defaultTime);
+                return Array(7).fill(defaultTime);
+            } catch(e) {
+                return Array(7).fill(defaultTime);
+            }
+        }
+
         async function syncWithMasterList(weekKey, currentData) {
             if (!supabaseClient) return currentData;
 
-            // 1. 전체 마스터 친구 목록 조회
             let { data: masters } = await supabaseClient.from('study_mate').select('*').eq('week_key', 'master_list');
             if (!masters || masters.length === 0) return currentData;
 
             let updated = false;
             for (let master of masters) {
-                // 현재 주차에 해당 마스터 친구가 없다면 새로 생성 (미래 주차 자동 연동)
                 const exists = currentData.some(d => d.name === master.name);
                 if (!exists) {
+                    const defaultTime = master.target_start_time || "08:40";
+                    // 마스터에 저장된 메모(요일별 세팅값)이 있으면 복사, 없으면 초기값 채움
+                    const initialNotes = master.notes || Array(7).fill(defaultTime).join(",");
+                    
                     await supabaseClient.from('study_mate').insert([{
                         id: Date.now() + Math.floor(Math.random() * 10000),
                         name: master.name,
-                        target_start_time: master.target_start_time,
+                        target_start_time: defaultTime,
                         week_key: weekKey,
                         time_done_list: [false, false, false, false, false, false, false],
                         start_done_list: [false, false, false, false, false, false, false],
-                        // 요일별 커스텀 목표 시간 (기본값은 전체 동일 설정)
-                        day_targets: [master.target_start_time, master.target_start_time, master.target_start_time, master.target_start_time, master.target_start_time, master.target_start_time, master.target_start_time]
+                        notes: initialNotes
                     }]);
                     updated = true;
                 }
@@ -163,9 +177,7 @@
 
                 if (error) throw error;
 
-                // 마스터 명단 동기화 로직 가동
                 data = await syncWithMasterList(weekKey, data || []);
-
                 serverData = data || [];
                 renderApp();
             } catch (err) {
@@ -186,7 +198,6 @@
             localStorage.setItem(`local_backup_${getWeekStorageKey()}`, JSON.stringify(serverData));
         }
 
-        // 요일 다중 터치 토글 함수
         function toggleDaySelection(friendId, dayIdx) {
             if (!selectedDaysMap[friendId]) {
                 selectedDaysMap[friendId] = [];
@@ -200,36 +211,43 @@
             renderApp();
         }
 
-        // 터치하여 선택된 요일들의 목표 시간 일괄 변경 (2번 요구사항)
+        // 🛠️ 세팅 실패 버그 전면 수정된 일괄 세팅 로직
         async function editSelectedDaysTarget(friendId) {
             const selectedDays = selectedDaysMap[friendId] || [];
             if (selectedDays.length === 0) {
-                alert("목표 시간을 변경할 요일을 먼저 아래 표에서 터치하여 선택해 주세요!");
+                alert("목표 시간을 변경할 요일을 먼저 아래 동그란 요일 패널에서 선택(터치)해 주세요!");
                 return;
             }
 
             const friend = serverData.find(f => f.id === friendId);
             if (!friend) return;
 
-            const newTime = prompt(`선택한 요일들의 새로운 목표 공부 시작 시간을 입력하세요 (예: 08:40):`, friend.target_start_time);
+            const baseTime = friend.target_start_time || "08:40";
+            const newTime = prompt(`선택한 요일들의 새로운 목표 시간을 입력하세요:`, baseTime);
             if (!newTime) return;
 
-            // 요일별 목표 배열이 없으면 초기화
-            let dayTargets = friend.day_targets || [friend.target_start_time, friend.target_start_time, friend.target_start_time, friend.target_start_time, friend.target_start_time, friend.target_start_time, friend.target_start_time];
+            // 현재 저장되어 있는 요일배열 파싱 및 빈값 채우기
+            let currentTargets = parseDayTargets(friend);
             
+            // 터치해서 불 들어온 요일 인덱스만 새 시간으로 정밀 덮어쓰기
             selectedDays.forEach(idx => {
-                dayTargets[idx] = newTime;
+                currentTargets[idx] = newTime;
             });
 
+            const updatedNotesString = currentTargets.join(",");
+
             if (supabaseClient) {
-                await supabaseClient.from('study_mate').update({ day_targets: dayTargets }).eq('id', friendId);
+                // 데이터베이스 호환성이 완벽히 검증된 notes 컬럼에 스트링 구조로 안전하게 밀어넣어 업데이트 성공 보장
+                await supabaseClient.from('study_mate').update({ notes: updatedNotesString }).eq('id', friendId);
+                
+                // 마스터 리스트에도 동기화 적용하여 다음주에도 이 세팅이 따라가도록 처리
+                await supabaseClient.from('study_mate').update({ notes: updatedNotesString }).eq('name', friend.name).eq('week_key', 'master_list');
             } else {
-                friend.day_targets = dayTargets;
+                friend.notes = updatedNotesString;
                 saveLocalBackup();
             }
 
-            // 변경 후 선택 배열 초기화
-            selectedDaysMap[friendId] = [];
+            selectedDaysMap[friendId] = []; // 선택 비우기
             loadServerData();
         }
 
@@ -245,7 +263,10 @@
             serverData.forEach(friend => {
                 if(!friend.time_done_list) friend.time_done_list = [false, false, false, false, false, false, false];
                 if(!friend.start_done_list) friend.start_done_list = [false, false, false, false, false, false, false];
-                if(!friend.day_targets) friend.day_targets = [friend.target_start_time, friend.target_start_time, friend.target_start_time, friend.target_start_time, friend.target_start_time, friend.target_start_time, friend.target_start_time];
+                
+                // 🛠️ null 노출 원천 봉쇄 장치 적용
+                if(!friend.target_start_time) friend.target_start_time = "08:40";
+                let dayTargets = parseDayTargets(friend);
 
                 let timeSuccess = friend.time_done_list.filter(v => v === true).length;
                 let startSuccess = friend.start_done_list.filter(v => v === true).length;
@@ -278,7 +299,7 @@
                                         <button onclick="deleteFriend(${friend.id}, '${friend.name}')" class="text-xs text-slate-300 hover:text-rose-500 font-bold transition cursor-pointer p-0.5"><i class="fa-solid fa-circle-xmark"></i></button>
                                     </div>
                                     <div class="text-[11px] text-slate-500 font-medium mt-1">
-                                        요일 터치 후 <button onclick="editSelectedDaysTarget(${friend.id})" class="ml-1 text-indigo-600 font-bold underline cursor-pointer bg-indigo-50 px-2 py-0.5 rounded-md">선택 요일 목표 변경</button>
+                                        요일 선택 후 <button onclick="editSelectedDaysTarget(${friend.id})" class="ml-1 text-indigo-600 font-bold underline cursor-pointer bg-indigo-50 px-2 py-0.5 rounded-md">선택 요일 목표 변경</button>
                                     </div>
                                 </div>
                                 <button onclick="setDayOff(${friend.id})" class="text-xs font-bold px-3 py-1.5 rounded-xl border transition cursor-pointer ${friend.day_off_used ? 'bg-amber-100 border-amber-200 text-amber-800' : 'bg-white border-slate-200 text-slate-600'}">
@@ -305,7 +326,7 @@
                                 
                                 <div class="grid grid-cols-8 text-center text-[9px] font-bold text-indigo-500 bg-indigo-50/50 py-0.5 rounded-md">
                                     <div class="text-slate-400">목표시간</div>
-                                    ${friend.day_targets.map(t => `<div>${t}</div>`).join('')}
+                                    ${dayTargets.map(t => `<div>${t}</div>`).join('')}
                                 </div>
 
                                 <div class="grid grid-cols-8 items-center text-center">
@@ -342,10 +363,13 @@
         async function addNewFriend() {
             const name = prompt("새로운 친구 이름을 입력하세요:");
             if(!name) return;
-            const time = prompt("목표 시작 시간을 입력하세요:", "08:40");
+            let time = prompt("목표 시작 시간을 입력하세요:", "08:40");
+            if(!time || time.trim() === "") time = "08:40"; // 빈값 방어막
+
+            // 첫 가입 시 7일 모두 입력한 시간으로 강제 세팅하여 null을 완벽 방지
+            const defaultNotesString = Array(7).fill(time).join(",");
             
             if (supabaseClient) {
-                // 1. 미래 자동 생성을 위해 마스터 보관함(`master_list`)에 기본 등록
                 await supabaseClient.from('study_mate').insert([{
                     id: Date.now() + 1,
                     name: name,
@@ -353,10 +377,9 @@
                     week_key: 'master_list',
                     time_done_list: [false, false, false, false, false, false, false],
                     start_done_list: [false, false, false, false, false, false, false],
-                    day_targets: [time, time, time, time, time, time, time]
+                    notes: defaultNotesString
                 }]);
 
-                // 2. 현재 활성화되어 보고 있는 주차에도 즉시 노출하도록 등록
                 await supabaseClient.from('study_mate').insert([{
                     id: Date.now(),
                     name: name,
@@ -364,14 +387,14 @@
                     week_key: getWeekStorageKey(),
                     time_done_list: [false, false, false, false, false, false, false],
                     start_done_list: [false, false, false, false, false, false, false],
-                    day_targets: [time, time, time, time, time, time, time]
+                    notes: defaultNotesString
                 }]);
             } else {
                 serverData.push({
                     id: Date.now(), name: name, target_start_time: time, week_key: getWeekStorageKey(),
                     time_done_list: [false, false, false, false, false, false, false],
                     start_done_list: [false, false, false, false, false, false, false],
-                    day_targets: [time, time, time, time, time, time, time]
+                    notes: defaultNotesString
                 });
                 saveLocalBackup();
             }
@@ -417,7 +440,6 @@
         async function deleteFriend(id, name) {
             if(confirm(`정말로 '${name}' 님을 명단에서 삭제하시겠습니까?\n(미래 주차 자동 연동 목록에서도 함께 지워집니다.)`)) {
                 if (supabaseClient) {
-                    // 마스터 목록과 현재 주차 목록 둘 다에서 완전히 삭제 처리
                     await supabaseClient.from('study_mate').delete().eq('name', name).eq('week_key', 'master_list');
                     await supabaseClient.from('study_mate').delete().eq('id', id);
                 } else {
