@@ -72,7 +72,6 @@
         let weekOffset = 0; 
         let currentWeekDates = [];
         let serverData = [];
-        let isWeekChanging = false; // 🛠️ 버그 해결 핵심 변수: 주차 이동 중에만 이월되도록 제한
 
         function updateDDays() {
             const today = new Date();
@@ -105,7 +104,6 @@
         }
 
         function changeWeek(direction) {
-            isWeekChanging = true; // 주차 변경 작동 활성화
             weekOffset += direction;
             currentWeekDates = getWeekDates(weekOffset);
             loadServerData();
@@ -129,32 +127,7 @@
 
                 if (error) throw error;
 
-                // 🛠️ 자동 이월 로직 수정: '주차 조절 버튼을 눌러 이동했을 때만' 비어있는 칸을 이월 처리함 (삭제 시 부활 방지)
-                if ((!data || data.length === 0) && isWeekChanging) {
-                    isWeekChanging = false; // 플래그 초기화
-                    let { data: prevData } = await supabaseClient.from('study_mate').select('*');
-                    const uniqueNames = [...new Set(prevData?.map(p => p.name))];
-                    
-                    if(uniqueNames.length > 0) {
-                        for(let name of uniqueNames) {
-                            const template = prevData.find(p => p.name === name);
-                            await supabaseClient.from('study_mate').insert([{
-                                id: Date.now() + Math.floor(Math.random() * 1000),
-                                name: name,
-                                target_start_time: template.target_start_time,
-                                week_key: weekKey,
-                                time_done_list: [false, false, false, false, false, false, false],
-                                start_done_list: [false, false, false, false, false, false, false]
-                            }]);
-                        }
-                        let { data: reData } = await supabaseClient.from('study_mate').select('*').eq('week_key', weekKey);
-                        serverData = reData || [];
-                        renderApp();
-                        return;
-                    }
-                }
-                
-                isWeekChanging = false; // 일반 주기적 로드 시 플래그 안전 해제
+                // 🛠️ 버그 원인 원천 차단: 0명일 때 과거 내역을 뒤져서 부활시키던 '자동 이월' 로직을 완전히 제거했습니다.
                 serverData = data || [];
                 renderApp();
             } catch (err) {
@@ -348,8 +321,6 @@
                     serverData = serverData.filter(f => f.id !== id);
                     saveLocalBackup();
                 }
-                // 🛠️ 버그 해결 핵심: 삭제 직후에는 절대 이월 로직이 돌지 않도록 플래그 강제 다운
-                isWeekChanging = false; 
                 loadServerData();
             }
         }
