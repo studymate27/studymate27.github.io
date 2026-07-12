@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>스터디 메이트 - 실시간 동기화 현황판</title>
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4" defer></script>
-    <script src="https://unpkg.com/@supabase/supabase-js@2" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
 <body class="bg-slate-50 text-slate-800 min-h-screen font-sans">
@@ -109,13 +109,14 @@
         let syncedWeeks = new Set(); // 이미 마스터 동기화를 완료한 주차 (중복 라운드트립 방지)
 
         function updateDDays() {
-            const today = new Date();
-            const mopyungDate = new Date("2026-09-03T00:00:00");
-            const suneungDate = new Date("2026-11-19T00:00:00");
-            const ddayMopyung = Math.ceil((mopyungDate - today) / (1000 * 60 * 60 * 24));
-            const ddaySuneung = Math.ceil((suneungDate - today) / (1000 * 60 * 60 * 24));
-            document.getElementById('mopyung-dday').innerText = ddayMopyung > 0 ? `D-${ddayMopyung}` : `D+${Math.abs(ddayMopyung)}`;
-            document.getElementById('suneung-dday').innerText = ddaySuneung > 0 ? `D-${ddaySuneung}` : `D+${Math.abs(ddaySuneung)}`;
+            const now = new Date();
+            const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()); // 시:분:초 영향 제거
+            const mopyungDate = new Date(2026, 8, 3);  // 9월 3일 (month는 0-indexed)
+            const suneungDate = new Date(2026, 10, 19); // 11월 19일
+            const ddayMopyung = Math.round((mopyungDate - today) / (1000 * 60 * 60 * 24));
+            const ddaySuneung = Math.round((suneungDate - today) / (1000 * 60 * 60 * 24));
+            document.getElementById('mopyung-dday').innerText = ddayMopyung > 0 ? `D-${ddayMopyung}` : ddayMopyung === 0 ? `D-Day` : `D+${Math.abs(ddayMopyung)}`;
+            document.getElementById('suneung-dday').innerText = ddaySuneung > 0 ? `D-${ddaySuneung}` : ddaySuneung === 0 ? `D-Day` : `D+${Math.abs(ddaySuneung)}`;
         }
 
         function getWeekDates(offset) {
@@ -200,14 +201,14 @@
             return reFetched || currentData;
         }
 
-        function setSyncStatus(ok) {
+        function setSyncStatus(ok, message) {
             const el = document.getElementById('sync-status');
             if (ok) {
                 el.className = "text-xs bg-emerald-100 text-emerald-800 font-bold px-3 py-1.5 rounded-full flex items-center gap-1.5 shadow-xs";
-                el.innerHTML = `<span class="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></span> 실시간 서버 On`;
+                el.innerHTML = `<span class="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></span> ${message || '실시간 서버 On'}`;
             } else {
-                el.className = "text-xs bg-rose-100 text-rose-800 font-bold px-3 py-1.5 rounded-full flex items-center gap-1.5 shadow-xs";
-                el.innerHTML = `<span class="w-1.5 h-1.5 bg-rose-500 rounded-full"></span> 서버 연결 오류`;
+                el.className = "text-xs bg-amber-100 text-amber-800 font-bold px-3 py-1.5 rounded-full flex items-center gap-1.5 shadow-xs";
+                el.innerHTML = `<span class="w-1.5 h-1.5 bg-amber-500 rounded-full"></span> ${message || '서버 연결 오류'}`;
             }
         }
 
@@ -567,13 +568,72 @@
             }
         }
 
-        window.addEventListener('DOMContentLoaded', () => {
-            initSupabase();
+        // 외부 CDN(Supabase 라이브러리)이 느리거나 차단된 네트워크에서도
+        // 화면(D-day, 주차 표시)이 절대 멈춰있지 않도록, DOMContentLoaded에 의존하지 않고
+        // 이 스크립트가 실행되는 즉시(DOM은 이미 파싱된 상태) 부팅한다.
+        function waitForSupabaseLib(timeoutMs = 4000, intervalMs = 150) {
+            return new Promise(resolve => {
+                const start = Date.now();
+                (function check() {
+                    if (window.supabase && typeof window.supabase.createClient === 'function') {
+                        resolve(true);
+                    } else if (Date.now() - start > timeoutMs) {
+                        resolve(false);
+                    } else {
+                        setTimeout(check, intervalMs);
+                    }
+                })();
+            });
+        }
+
+        function injectScript(src) {
+            return new Promise((resolve, reject) => {
+                const s = document.createElement('script');
+                s.src = src;
+                s.onload = () => resolve(true);
+                s.onerror = () => reject(new Error('로드 실패: ' + src));
+                document.head.appendChild(s);
+            });
+        }
+
+        // jsdelivr(기본) → 실패 시 unpkg(백업) 순서로 재시도. 특정 CDN 하나가
+        // 그 순간 느리거나 막혀도 다른 경로로 라이브러리를 확보한다.
+        async function ensureSupabaseLib() {
+            let ready = await waitForSupabaseLib(4000);
+            if (ready) return true;
+
+            console.warn("jsdelivr에서 Supabase 로드 지연/실패 - unpkg으로 재시도합니다.");
+            try {
+                await injectScript('https://unpkg.com/@supabase/supabase-js@2');
+                ready = await waitForSupabaseLib(4000);
+                if (ready) return true;
+            } catch (e) {
+                console.warn(e.message);
+            }
+            return false;
+        }
+
+        async function bootApp() {
+            // 1) 네트워크/CDN과 무관하게 즉시 표시되어야 하는 것들
             updateDDays();
             currentWeekDates = getWeekDates(weekOffset);
+            document.getElementById('week-title').innerText =
+                `${currentWeekDates[0].label.split('(')[0]} ~ ${currentWeekDates[6].label.split('(')[0]} 현황`;
+
+            // 2) Supabase 라이브러리 확보 시도 (jsdelivr → unpkg 순서, 최대 8초)
+            const ready = await ensureSupabaseLib();
+            if (ready) {
+                initSupabase();
+            } else {
+                console.warn("Supabase 라이브러리를 불러오지 못했습니다. 로컬 모드로 전환합니다.");
+                setSyncStatus(false, "로컬 모드 (서버 연결 안됨)");
+            }
+
             loadServerData();
             setInterval(loadServerData, 5000);
-        });
+        }
+
+        bootApp();
     </script>
 </body>
 </html>
