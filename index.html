@@ -40,7 +40,7 @@
         </div>
         <div class="max-w-6xl mx-auto px-4 pb-3 -mt-1">
             <p class="text-[11px] text-slate-400 font-medium text-center md:text-left">
-                하루 기준 · 공부 5시간 미만 <span class="text-rose-500 font-bold">-1점</span> · 목표시간 미준수 <span class="text-rose-500 font-bold">-1점</span> · 보너스 시간 이상 공부 <span class="text-emerald-600 font-bold">+1점</span> (Day off인 날은 계산 제외) · 점수는 계속 이어지다가 잔고가 마이너스인 주에만 500원×점수로 정산돼요
+                하루 기준 · 공부 5시간 미만 <span class="text-rose-500 font-bold">-1점</span> · 목표시간 미준수 <span class="text-rose-500 font-bold">-1점</span> · 🎁 보너스 별 탭 <span class="text-emerald-600 font-bold">+1점</span> (Day off인 날은 계산 제외) · 점수는 계속 이어지다가 잔고가 마이너스인 주에만 500원×점수로 정산돼요
             </p>
         </div>
     </header>
@@ -94,6 +94,21 @@
         </div>
     </div>
 
+    <!-- 보너스 기준 시간 선택 모달 (스크롤 피커) -->
+    <div id="bonus-picker-modal" class="fixed inset-0 bg-black/40 backdrop-blur-sm z-[100] hidden items-center justify-center px-4">
+        <div class="bg-white rounded-2xl shadow-xl w-full max-w-xs p-5">
+            <h3 class="text-sm font-bold text-slate-800 mb-4 text-center">🎁 보너스 기준 시간</h3>
+            <div class="flex justify-center items-center gap-2 mb-5">
+                <select id="bonus-hour-select" class="text-2xl font-bold text-center bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 w-32 focus:outline-none focus:ring-2 focus:ring-lime-300"></select>
+                <span class="text-base font-bold text-slate-400">시간 이상</span>
+            </div>
+            <div class="flex gap-2">
+                <button onclick="closeBonusPicker(false)" class="flex-1 py-2.5 rounded-xl bg-slate-100 text-slate-600 font-bold text-sm cursor-pointer">취소</button>
+                <button onclick="closeBonusPicker(true)" class="flex-1 py-2.5 rounded-xl bg-lime-600 text-white font-bold text-sm cursor-pointer">확인</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         const SUPABASE_URL = "https://jgmrktikgxtivsedsvmz.supabase.co";
         const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpnbXJrdGlrZ3h0aXZzZWRzdm16Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM3NzM3MzQsImV4cCI6MjA5OTM0OTczNH0.cL2BOJGYFvKtFjNloDwJOd6OwgXoJ8d8PeI1MRadEXo";
@@ -118,7 +133,7 @@
 
         // ===== 상점/벌점 시스템 =====
         const MIN_HOURS = 5;                 // 이 시간 미만이면 -1점
-        let bonusHours = 7;                  // 이 시간 이상이면 +1점 (설정 가능, 기본 7)
+        let bonusHours = 7;                  // 보너스 기준(표시용) - 실제 보너스 지급은 별 토글로 직접 판단
         const SETTINGS_NAME = "__settings__";
         const SETTINGS_WEEK_KEY = "global_settings";
         let masterByName = {};               // name -> master_list row
@@ -129,11 +144,37 @@
             if (el) el.innerText = bonusHours + "시간+";
         }
 
+        // ===== 스크롤(휠) 보너스 기준 시간 피커 =====
+        let _bonusPickerResolve = null;
+        function openBonusPicker(defaultVal) {
+            return new Promise(resolve => {
+                _bonusPickerResolve = resolve;
+                const sel = document.getElementById('bonus-hour-select');
+                const options = [];
+                for (let v = 3; v <= 15; v += 0.5) options.push(v);
+                sel.innerHTML = options.map(v => {
+                    const label = Number.isInteger(v) ? `${v}` : v.toFixed(1);
+                    const selected = Math.abs(v - defaultVal) < 0.01 ? 'selected' : '';
+                    return `<option value="${v}" ${selected}>${label}</option>`;
+                }).join('');
+                const modal = document.getElementById('bonus-picker-modal');
+                modal.classList.remove('hidden');
+                modal.classList.add('flex');
+            });
+        }
+        function closeBonusPicker(confirmed) {
+            const modal = document.getElementById('bonus-picker-modal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+            if (_bonusPickerResolve) {
+                _bonusPickerResolve(confirmed ? parseFloat(document.getElementById('bonus-hour-select').value) : null);
+                _bonusPickerResolve = null;
+            }
+        }
+
         async function editBonusHours() {
-            const input = prompt("보너스(+1점)를 받는 기준 시간을 입력하세요 (시간 단위, 예: 7)", String(bonusHours));
-            if (input === null) return;
-            const val = parseFloat(input);
-            if (isNaN(val) || val <= 0) { alert("올바른 숫자를 입력해주세요."); return; }
+            const val = await openBonusPicker(bonusHours);
+            if (val === null) return; // 취소함
             bonusHours = val;
             updateBonusLabel();
             if (supabaseClient) {
@@ -146,6 +187,7 @@
                     time_done_list: [],
                     start_done_list: [],
                     study_hours_list: [],
+                    bonus_done_list: [],
                     notes: JSON.stringify({ bonusHours: val }),
                     day_off_used: false,
                     day_off_day: 0
@@ -155,20 +197,20 @@
             loadServerData();
         }
 
-        // 하루치 점수 계산: 공부시간, 목표시간 준수 여부, day off 여부를 받아 그날의 점수 변화를 반환
-        function dayDelta(hours, goalDone, isDayOff) {
+        // 하루치 점수 계산: 공부시간(최소 기준), 목표시간 준수 여부, 보너스 별 토글, day off 여부를 받아 그날의 점수 변화를 반환
+        function dayDelta(hours, goalDone, bonusDone, isDayOff) {
             if (isDayOff) return 0;
             let d = 0;
             if (hours < MIN_HOURS) d -= 1;
             if (!goalDone) d -= 1;
-            if (hours >= bonusHours) d += 1;
+            if (bonusDone) d += 1;
             return d;
         }
 
-        function dayDeltaDisplay(hours, goalDone, isDayOff, isFuture) {
+        function dayDeltaDisplay(hours, goalDone, bonusDone, isDayOff, isFuture) {
             if (isDayOff) return { text: '☁️', cls: 'text-amber-500' };
             if (isFuture) return { text: '-', cls: 'text-slate-300' };
-            const d = dayDelta(hours, goalDone, false);
+            const d = dayDelta(hours, goalDone, bonusDone, false);
             if (d > 0) return { text: '+' + d, cls: 'text-emerald-600 font-extrabold' };
             if (d < 0) return { text: String(d), cls: 'text-rose-600 font-extrabold' };
             return { text: '0', cls: 'text-slate-400 font-bold' };
@@ -193,6 +235,7 @@
             today.setHours(0, 0, 0, 0);
             const hoursArr = (row && row.study_hours_list && row.study_hours_list.length === 7) ? row.study_hours_list : [0,0,0,0,0,0,0];
             const startArr = (row && row.start_done_list && row.start_done_list.length === 7) ? row.start_done_list : [false,false,false,false,false,false,false];
+            const bonusArr = (row && row.bonus_done_list && row.bonus_done_list.length === 7) ? row.bonus_done_list : [false,false,false,false,false,false,false];
             const dayOffUsed = row ? !!row.day_off_used : false;
             const dayOffDay = row ? row.day_off_day : -1;
             let sum = 0;
@@ -202,7 +245,8 @@
                 if (isOff) continue;
                 const hrs = Number(hoursArr[i]) || 0;
                 const goalDone = !!startArr[i];
-                sum += dayDelta(hrs, goalDone, false);
+                const bonusDone = !!bonusArr[i];
+                sum += dayDelta(hrs, goalDone, bonusDone, false);
             }
             return sum;
         }
@@ -321,6 +365,7 @@
                     time_done_list: [false, false, false, false, false, false, false],
                     start_done_list: [false, false, false, false, false, false, false],
                     study_hours_list: [0, 0, 0, 0, 0, 0, 0],
+                    bonus_done_list: [false, false, false, false, false, false, false],
                     notes: fallbackNotes,
                     day_off_used: false,
                     day_off_day: 0
@@ -571,6 +616,7 @@
             serverData.forEach(friend => {
                 if(!friend.start_done_list) friend.start_done_list = [false, false, false, false, false, false, false];
                 if(!friend.study_hours_list || friend.study_hours_list.length !== 7) friend.study_hours_list = [0,0,0,0,0,0,0];
+                if(!friend.bonus_done_list || friend.bonus_done_list.length !== 7) friend.bonus_done_list = [false,false,false,false,false,false,false];
                 if(!friend.target_start_time || friend.target_start_time === "null") friend.target_start_time = "08:40";
 
                 let dayTargets = parseDayTargets(friend);
@@ -634,6 +680,17 @@
                                     }).join('')}
                                 </div>
                                 <div class="grid grid-cols-8 items-center text-center">
+                                    <div class="text-[11px] font-bold text-slate-500 text-left">🎁 보너스</div>
+                                    ${friend.bonus_done_list.map((v, idx) => {
+                                        const isOff = friend.day_off_used && friend.day_off_day === idx;
+                                        return `<div class="flex justify-center">
+                                            <button onclick="toggleBonus(${friend.id}, ${idx}, ${v})" class="w-6 h-6 rounded-md flex items-center justify-center border text-sm cursor-pointer transition ${isOff ? 'bg-amber-100 border-amber-100 text-amber-600' : v ? 'bg-lime-50 border-lime-300 text-lime-500' : 'bg-white border-slate-200 text-slate-300'}">
+                                                ${isOff ? '☁️' : (v ? '★' : '☆')}
+                                            </button>
+                                        </div>`;
+                                    }).join('')}
+                                </div>
+                                <div class="grid grid-cols-8 items-center text-center">
                                     <div class="text-[11px] font-bold text-slate-500 text-left">시작시간</div>
                                     ${friend.start_done_list.map((v, idx) => `
                                         <div class="flex justify-center">
@@ -653,7 +710,8 @@
                                         return friend.study_hours_list.map((h, idx) => {
                                             const isOff = friend.day_off_used && friend.day_off_day === idx;
                                             const isFuture = dates[idx] > today;
-                                            const disp = dayDeltaDisplay(Number(h)||0, !!friend.start_done_list[idx], isOff, isFuture);
+                                            const bonusDone = !!friend.bonus_done_list[idx];
+                                            const disp = dayDeltaDisplay(Number(h)||0, !!friend.start_done_list[idx], bonusDone, isOff, isFuture);
                                             return `<div class="text-[11px] ${disp.cls}">${disp.text}</div>`;
                                         }).join('');
                                     })()}
@@ -703,6 +761,7 @@
                     time_done_list: [false, false, false, false, false, false, false],
                     start_done_list: [false, false, false, false, false, false, false],
                     study_hours_list: [0, 0, 0, 0, 0, 0, 0],
+                    bonus_done_list: [false, false, false, false, false, false, false],
                     notes: defaultNotes,
                     day_off_used: false, day_off_day: 0
                 }], { onConflict: 'name,week_key', ignoreDuplicates: true });
@@ -718,6 +777,7 @@
                     time_done_list: [false, false, false, false, false, false, false],
                     start_done_list: [false, false, false, false, false, false, false],
                     study_hours_list: [0, 0, 0, 0, 0, 0, 0],
+                    bonus_done_list: [false, false, false, false, false, false, false],
                     notes: defaultNotes,
                     day_off_used: false, day_off_day: 0
                 }], { onConflict: 'name,week_key', ignoreDuplicates: true });
@@ -729,6 +789,7 @@
                     time_done_list: [false, false, false, false, false, false, false],
                     start_done_list: [false, false, false, false, false, false, false],
                     study_hours_list: [0, 0, 0, 0, 0, 0, 0],
+                    bonus_done_list: [false, false, false, false, false, false, false],
                     notes: defaultNotes,
                     day_off_used: false, day_off_day: 0
                 });
@@ -752,6 +813,23 @@
                 if (error) { alert("저장 실패: " + error.message); return; }
             } else {
                 friend.study_hours_list = newList;
+                saveLocalBackup();
+            }
+            loadServerData();
+        }
+
+        async function toggleBonus(id, idx, currentVal) {
+            const friend = serverData.find(f => f.id === id);
+            if (!friend) return;
+            if (friend.day_off_used && friend.day_off_day === idx) return;
+            let newList = (friend.bonus_done_list && friend.bonus_done_list.length === 7) ? [...friend.bonus_done_list] : [false,false,false,false,false,false,false];
+            newList[idx] = !currentVal;
+
+            if (supabaseClient) {
+                const { error } = await supabaseClient.from('study_mate').update({ bonus_done_list: newList }).eq('id', id);
+                if (error) { alert("저장 실패: " + error.message); return; }
+            } else {
+                friend.bonus_done_list = newList;
                 saveLocalBackup();
             }
             loadServerData();
