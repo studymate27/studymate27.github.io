@@ -66,4 +66,16 @@
             </div>
             <div class="flex gap-2">
                 <button onclick="closeTimePicker(false)" class="flex-1 py-2.5 rounded-xl bg-slate-100 text-slate-600 font-bold text-sm cursor-pointer">취소</button>
-                <button onclick="closeTimePicker(true)" class="flex-1 py-2.5 rounded-xl bg-indigo-600 text-white font-bold text-sm cursor-
+                <button onclick="closeTimePicker(true)" class="flex-1 py-2.5 rounded-xl bg-indigo-600 text-white font-bold text-sm cursor-pointer">확인</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="dayoff-picker-modal" class="fixed inset-0 bg-black/40 backdrop-blur-sm z-[100] hidden items-center justify-center px-4">
+        <div class="bg-white rounded-2xl shadow-xl w-full max-w-xs p-5">
+            <h3 class="text-sm font-bold text-slate-800 mb-4 text-center">Day Off 요일 선택</h3>
+            <div class="flex justify-center mb-5">
+                <select id="do-select" class="text-lg font-bold text-center bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 w-full focus:outline-none focus:ring-2 focus:ring-amber-300"></select>
+            </div>
+            <div class="flex gap-2">
+                <button onclick="
