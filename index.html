@@ -411,7 +411,7 @@
 
             try {
                 // 전체 테이블을 한 번에 가져와서 (친구 목록/마스터/설정/과거 주차) 모두 구성
-                let { data: allRows, error } = await supabaseClient.from('study_mate').select('*');
+                let { data: allRows, error } = await supabaseClient.from('study_mate').select('*').order('id', { ascending: true });
                 if (error) throw error;
                 allRows = allRows || [];
 
