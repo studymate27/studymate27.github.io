@@ -40,7 +40,7 @@
         </div>
         <div class="max-w-6xl mx-auto px-4 pb-3 -mt-1">
             <p class="text-[11px] text-slate-400 font-medium text-center md:text-left">
-                하루 기준 · 공부 5시간 미만 <span class="text-rose-500 font-bold">-1점</span> · 목표시간 미준수 <span class="text-rose-500 font-bold">-1점</span> · 🎁 보너스 별 탭 <span class="text-emerald-600 font-bold">+1점</span> (Day off인 날은 계산 제외) · 점수는 계속 이어지다가 잔고가 마이너스인 주에만 500원×점수로 정산돼요
+                하루 기준 · 공부시간 ○ (미달성) <span class="text-rose-500 font-bold">-1점</span> · 목표시간 미준수 <span class="text-rose-500 font-bold">-1점</span> · 🎁 보너스 별 탭 <span class="text-emerald-600 font-bold">+1점</span> (Day off인 날은 계산 제외) · 점수는 계속 이어지다가 잔고가 마이너스인 주에만 500원×점수로 정산돼요
             </p>
         </div>
     </header>
@@ -132,7 +132,7 @@
         let syncedWeeks = new Set(); // 이미 마스터 동기화를 완료한 주차 (중복 라운드트립 방지)
 
         // ===== 상점/벌점 시스템 =====
-        const MIN_HOURS = 5;                 // 이 시간 미만이면 -1점
+        // (공부 최소기준은 이제 study_done_list 토글로 직접 판단해요)
         let bonusHours = 7;                  // 보너스 기준(표시용) - 실제 보너스 지급은 별 토글로 직접 판단
         const SETTINGS_NAME = "__settings__";
         const SETTINGS_WEEK_KEY = "global_settings";
@@ -186,7 +186,7 @@
                     start_week_key: null,
                     time_done_list: [],
                     start_done_list: [],
-                    study_hours_list: [],
+                    study_done_list: [],
                     bonus_done_list: [],
                     notes: JSON.stringify({ bonusHours: val }),
                     day_off_used: false,
@@ -197,20 +197,20 @@
             loadServerData();
         }
 
-        // 하루치 점수 계산: 공부시간(최소 기준), 목표시간 준수 여부, 보너스 별 토글, day off 여부를 받아 그날의 점수 변화를 반환
-        function dayDelta(hours, goalDone, bonusDone, isDayOff) {
+        // 하루치 점수 계산: 공부 최소기준 토글, 목표시간 준수 여부, 보너스 별 토글, day off 여부를 받아 그날의 점수 변화를 반환
+        function dayDelta(studyDone, goalDone, bonusDone, isDayOff) {
             if (isDayOff) return 0;
             let d = 0;
-            if (hours < MIN_HOURS) d -= 1;
+            if (!studyDone) d -= 1;
             if (!goalDone) d -= 1;
             if (bonusDone) d += 1;
             return d;
         }
 
-        function dayDeltaDisplay(hours, goalDone, bonusDone, isDayOff, isFuture) {
+        function dayDeltaDisplay(studyDone, goalDone, bonusDone, isDayOff, isFuture) {
             if (isDayOff) return { text: '☁️', cls: 'text-amber-500' };
             if (isFuture) return { text: '-', cls: 'text-slate-300' };
-            const d = dayDelta(hours, goalDone, bonusDone, false);
+            const d = dayDelta(studyDone, goalDone, bonusDone, false);
             if (d > 0) return { text: '+' + d, cls: 'text-emerald-600 font-extrabold' };
             if (d < 0) return { text: String(d), cls: 'text-rose-600 font-extrabold' };
             return { text: '0', cls: 'text-slate-400 font-bold' };
@@ -233,7 +233,7 @@
             const dates = datesForWeekKey(weekKey);
             const today = new Date();
             today.setHours(0, 0, 0, 0);
-            const hoursArr = (row && row.study_hours_list && row.study_hours_list.length === 7) ? row.study_hours_list : [0,0,0,0,0,0,0];
+            const studyArr = (row && row.study_done_list && row.study_done_list.length === 7) ? row.study_done_list : [false,false,false,false,false,false,false];
             const startArr = (row && row.start_done_list && row.start_done_list.length === 7) ? row.start_done_list : [false,false,false,false,false,false,false];
             const bonusArr = (row && row.bonus_done_list && row.bonus_done_list.length === 7) ? row.bonus_done_list : [false,false,false,false,false,false,false];
             const dayOffUsed = row ? !!row.day_off_used : false;
@@ -243,10 +243,10 @@
                 if (dates[i] > today) continue;
                 const isOff = dayOffUsed && dayOffDay === i;
                 if (isOff) continue;
-                const hrs = Number(hoursArr[i]) || 0;
+                const studyDone = !!studyArr[i];
                 const goalDone = !!startArr[i];
                 const bonusDone = !!bonusArr[i];
-                sum += dayDelta(hrs, goalDone, bonusDone, false);
+                sum += dayDelta(studyDone, goalDone, bonusDone, false);
             }
             return sum;
         }
@@ -364,7 +364,7 @@
                     start_week_key: master.start_week_key,
                     time_done_list: [false, false, false, false, false, false, false],
                     start_done_list: [false, false, false, false, false, false, false],
-                    study_hours_list: [0, 0, 0, 0, 0, 0, 0],
+                    study_done_list: [false, false, false, false, false, false, false],
                     bonus_done_list: [false, false, false, false, false, false, false],
                     notes: fallbackNotes,
                     day_off_used: false,
@@ -615,7 +615,7 @@
 
             serverData.forEach(friend => {
                 if(!friend.start_done_list) friend.start_done_list = [false, false, false, false, false, false, false];
-                if(!friend.study_hours_list || friend.study_hours_list.length !== 7) friend.study_hours_list = [0,0,0,0,0,0,0];
+                if(!friend.study_done_list || friend.study_done_list.length !== 7) friend.study_done_list = [false,false,false,false,false,false,false];
                 if(!friend.bonus_done_list || friend.bonus_done_list.length !== 7) friend.bonus_done_list = [false,false,false,false,false,false,false];
                 if(!friend.target_start_time || friend.target_start_time === "null") friend.target_start_time = "08:40";
 
@@ -669,13 +669,12 @@
 
                                 <div class="grid grid-cols-8 items-center text-center">
                                     <div class="text-[11px] font-bold text-slate-500 text-left">공부시간</div>
-                                    ${friend.study_hours_list.map((h, idx) => {
+                                    ${friend.study_done_list.map((v, idx) => {
                                         const isOff = friend.day_off_used && friend.day_off_day === idx;
-                                        if (isOff) return `<div class="flex justify-center"><span class="text-sm">☁️</span></div>`;
                                         return `<div class="flex justify-center">
-                                            <input type="number" min="0" max="24" step="0.5" value="${h || 0}"
-                                                onchange="updateHours(${friend.id}, ${idx}, this.value)"
-                                                class="w-9 h-7 text-center text-[11px] font-bold border rounded-md ${Number(h) >= MIN_HOURS ? 'bg-indigo-50 border-indigo-200 text-indigo-700' : 'bg-white border-slate-200 text-slate-600'} focus:outline-none focus:ring-1 focus:ring-indigo-300">
+                                            <button onclick="toggleStudyDone(${friend.id}, ${idx}, ${v})" class="w-6 h-6 rounded-md flex items-center justify-center border text-sm cursor-pointer transition ${isOff ? 'bg-amber-100 border-amber-100 text-amber-600' : v ? 'bg-indigo-50 border-indigo-300 text-indigo-500' : 'bg-white border-slate-200 text-slate-300'}">
+                                                ${isOff ? '☁️' : (v ? '●' : '○')}
+                                            </button>
                                         </div>`;
                                     }).join('')}
                                 </div>
@@ -707,11 +706,11 @@
                                             const [y,m,d] = currentWeekDates[idx].storageKey.split('-').map(Number);
                                             return new Date(y, m-1, d);
                                         });
-                                        return friend.study_hours_list.map((h, idx) => {
+                                        return friend.study_done_list.map((studyDone, idx) => {
                                             const isOff = friend.day_off_used && friend.day_off_day === idx;
                                             const isFuture = dates[idx] > today;
                                             const bonusDone = !!friend.bonus_done_list[idx];
-                                            const disp = dayDeltaDisplay(Number(h)||0, !!friend.start_done_list[idx], bonusDone, isOff, isFuture);
+                                            const disp = dayDeltaDisplay(!!studyDone, !!friend.start_done_list[idx], bonusDone, isOff, isFuture);
                                             return `<div class="text-[11px] ${disp.cls}">${disp.text}</div>`;
                                         }).join('');
                                     })()}
@@ -760,7 +759,7 @@
                     start_week_key: startWeekKey,
                     time_done_list: [false, false, false, false, false, false, false],
                     start_done_list: [false, false, false, false, false, false, false],
-                    study_hours_list: [0, 0, 0, 0, 0, 0, 0],
+                    study_done_list: [false, false, false, false, false, false, false],
                     bonus_done_list: [false, false, false, false, false, false, false],
                     notes: defaultNotes,
                     day_off_used: false, day_off_day: 0
@@ -776,7 +775,7 @@
                     start_week_key: startWeekKey,
                     time_done_list: [false, false, false, false, false, false, false],
                     start_done_list: [false, false, false, false, false, false, false],
-                    study_hours_list: [0, 0, 0, 0, 0, 0, 0],
+                    study_done_list: [false, false, false, false, false, false, false],
                     bonus_done_list: [false, false, false, false, false, false, false],
                     notes: defaultNotes,
                     day_off_used: false, day_off_day: 0
@@ -788,7 +787,7 @@
                     start_week_key: startWeekKey,
                     time_done_list: [false, false, false, false, false, false, false],
                     start_done_list: [false, false, false, false, false, false, false],
-                    study_hours_list: [0, 0, 0, 0, 0, 0, 0],
+                    study_done_list: [false, false, false, false, false, false, false],
                     bonus_done_list: [false, false, false, false, false, false, false],
                     notes: defaultNotes,
                     day_off_used: false, day_off_day: 0
@@ -798,21 +797,18 @@
             loadServerData();
         }
 
-        async function updateHours(id, index, value) {
+        async function toggleStudyDone(id, idx, currentVal) {
             const friend = serverData.find(f => f.id === id);
             if (!friend) return;
-            if (friend.day_off_used && friend.day_off_day === index) return;
-            let hrs = parseFloat(value);
-            if (isNaN(hrs) || hrs < 0) hrs = 0;
-            if (hrs > 24) hrs = 24;
-            let newList = (friend.study_hours_list && friend.study_hours_list.length === 7) ? [...friend.study_hours_list] : [0,0,0,0,0,0,0];
-            newList[index] = hrs;
+            if (friend.day_off_used && friend.day_off_day === idx) return;
+            let newList = (friend.study_done_list && friend.study_done_list.length === 7) ? [...friend.study_done_list] : [false,false,false,false,false,false,false];
+            newList[idx] = !currentVal;
 
             if (supabaseClient) {
-                const { error } = await supabaseClient.from('study_mate').update({ study_hours_list: newList }).eq('id', id);
+                const { error } = await supabaseClient.from('study_mate').update({ study_done_list: newList }).eq('id', id);
                 if (error) { alert("저장 실패: " + error.message); return; }
             } else {
-                friend.study_hours_list = newList;
+                friend.study_done_list = newList;
                 saveLocalBackup();
             }
             loadServerData();
