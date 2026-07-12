@@ -24,10 +24,10 @@
 
             <div class="flex gap-3 text-xs font-bold">
                 <div class="bg-amber-50 border border-amber-200 text-amber-800 px-3 py-2 rounded-xl flex items-center gap-1.5 shadow-xs">
-                    9월 모평: <span id="mopyung-dday" class="text-amber-600 font-extrabold text-sm">D-Day</span>
+                    9월 모평: <span id="mopyung-dday" class="text-amber-600 font-extrabold text-sm">계산중</span>
                 </div>
                 <div class="bg-rose-50 border border-rose-200 text-rose-800 px-3 py-2 rounded-xl flex items-center gap-1.5 shadow-xs">
-                    🔥 수능: <span id="suneung-dday" class="text-rose-600 font-extrabold text-sm">D-Day</span>
+                    🔥 수능: <span id="suneung-dday" class="text-rose-600 font-extrabold text-sm">계산중</span>
                 </div>
             </div>
 
@@ -43,13 +43,13 @@
                 <button onclick="changeWeek(-1)" class="p-2 hover:bg-slate-50 rounded-lg text-slate-500 hover:text-slate-800 transition cursor-pointer">
                     <i class="fa-solid fa-chevron-left"></i>
                 </button>
-                <h2 id="week-title" class="text-sm md:text-base font-bold text-slate-800 px-2 min-w-[180px] text-center">주차 계산 중...</h2>
+                <h2 id="week-title" class="text-sm md:text-base font-bold text-slate-800 px-2 min-w-[180px] text-center">날짜 계산 중...</h2>
                 <button onclick="changeWeek(1)" class="p-2 hover:bg-slate-50 rounded-lg text-slate-500 hover:text-slate-800 transition cursor-pointer">
                     <i class="fa-solid fa-chevron-right"></i>
                 </button>
             </div>
             <span id="sync-status" class="text-xs bg-emerald-100 text-emerald-800 font-bold px-3 py-1.5 rounded-full flex items-center gap-1.5 shadow-xs">
-                <span class="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></span> 실시간 서버 On
+                <span class="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></span> 서버 연결 확인 중
             </span>
         </div>
 
@@ -78,4 +78,74 @@
                 <select id="do-select" class="text-lg font-bold text-center bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 w-full focus:outline-none focus:ring-2 focus:ring-amber-300"></select>
             </div>
             <div class="flex gap-2">
-                <button onclick="
+                <button onclick="closeDayOffPicker(false)" class="flex-1 py-2.5 rounded-xl bg-slate-100 text-slate-600 font-bold text-sm cursor-pointer">취소</button>
+                <button onclick="closeDayOffPicker(true)" class="flex-1 py-2.5 rounded-xl bg-amber-500 text-white font-bold text-sm cursor-pointer">확인</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const SUPABASE_URL = "https://jgmrktikgxtivsedsvmz.supabase.co";
+        const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpnbXJrdGlrZ3h0aXZzZWRzdm16Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM3NzM3MzQsImV4cCI6MjA5OTM0OTczNH0.cL2BOJGYFvKtFjNloDwJOd6OwgXoJ8d8PeI1MRadEXo";
+
+        let supabaseClient = null;
+        let weekOffset = 0;
+        let currentWeekDates = [];
+        let serverData = [];
+        let selectedDaysMap = {};
+        let syncedWeeks = new Set();
+
+        function initSupabase() {
+            try {
+                if (window.supabase && typeof window.supabase.createClient === 'function') {
+                    supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+                }
+            } catch(e) { console.error("Supabase 초기화 에러 무시:", e); }
+        }
+
+        function updateDDays() {
+            try {
+                const now = new Date();
+                const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+                const mopyungDate = new Date(2026, 8, 3);  
+                const suneungDate = new Date(2026, 10, 19); 
+                
+                const diffMopyung = mopyungDate.getTime() - today.getTime();
+                const diffSuneung = suneungDate.getTime() - today.getTime();
+                
+                const ddayMopyung = Math.ceil(diffMopyung / (1000 * 60 * 60 * 24));
+                const ddaySuneung = Math.ceil(diffSuneung / (1000 * 60 * 60 * 24));
+                
+                const mEl = document.getElementById('mopyung-dday');
+                const sEl = document.getElementById('suneung-dday');
+                
+                if(mEl) mEl.innerText = ddayMopyung > 0 ? `D-${ddayMopyung}` : ddayMopyung === 0 ? `D-Day` : `D+${Math.abs(ddayMopyung)}`;
+                if(sEl) sEl.innerText = ddaySuneung > 0 ? `D-${ddaySuneung}` : ddaySuneung === 0 ? `D-Day` : `D+${Math.abs(ddaySuneung)}`;
+            } catch(e) { 
+                console.error("D-Day 계산 에러 무시:", e); 
+            }
+        }
+
+        function getWeekDates(offset) {
+            try {
+                const current = new Date();
+                current.setDate(current.getDate() + (offset * 7));
+                const distanceToMonday = (current.getDay() === 0 ? 7 : current.getDay()) - 1;
+                const monday = new Date(current.setDate(current.getDate() - distanceToMonday));
+                const days = ["월", "화", "수", "목", "금", "토", "일"];
+                return days.map((day, idx) => {
+                    const nextDay = new Date(monday);
+                    nextDay.setDate(monday.getDate() + idx);
+                    return {
+                        label: `${nextDay.getMonth() + 1}/${nextDay.getDate()}(${day})`,
+                        storageKey: `${nextDay.getFullYear()}-${nextDay.getMonth() + 1}-${nextDay.getDate()}`
+                    };
+                });
+            } catch(e) {
+                console.error("주차 날짜 계산 에러 우회:", e);
+                return Array(7).fill({ label: "0/0(오류)", storageKey: "2026-01-01" });
+            }
+        }
+
+        function getWeekStorageKey() {
+            return (currentWeekDates && currentWeekDates[0]) ? `week_${currentWeekDates[0].storageKey}` :
