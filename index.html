@@ -139,6 +139,17 @@
             return `week_${currentWeekDates[0].storageKey}`;
         }
 
+        // "2026-7-13" 형태의 날짜 키를 Date로 변환
+        function parseDateKey(dateKey) {
+            const [y, m, d] = dateKey.split('-').map(Number);
+            return new Date(y, m - 1, d);
+        }
+        // "week_2026-7-13" 형태의 week_key를 Date로 변환 (master_list는 null)
+        function parseWeekKeyDate(weekKey) {
+            if (!weekKey || weekKey === 'master_list' || !weekKey.startsWith('week_')) return null;
+            return parseDateKey(weekKey.replace('week_', ''));
+        }
+
         function changeWeek(direction) {
             weekOffset += direction;
             currentWeekDates = getWeekDates(weekOffset);
@@ -186,7 +197,9 @@
                 };
             });
 
-            const { error: insErr } = await supabaseClient.from('study_mate').insert(newRows);
+            const { error: insErr } = await supabaseClient
+                .from('study_mate')
+                .upsert(newRows, { onConflict: 'name,week_key', ignoreDuplicates: true });
             if (insErr) {
                 console.error("마스터 동기화 삽입 실패:", insErr.message);
                 return currentData;
@@ -344,18 +357,40 @@
             const newTime = await openTimePicker(currentArr[targetDays[0]], "선택 요일 목표 시간");
             if (!newTime) return; // 취소함
 
-            targetDays.forEach(idx => { currentArr[idx] = newTime; });
-            const finalNotesStr = currentArr.join("|");
-
-            if (supabaseClient) {
-                const { error: e1 } = await supabaseClient.from('study_mate').update({ notes: finalNotesStr }).eq('id', friendId);
-                if (e1) { alert("저장 실패: " + e1.message); return; }
-                const { error: e2 } = await supabaseClient.from('study_mate').update({ notes: finalNotesStr }).eq('name', friend.name).eq('week_key', 'master_list');
-                if (e2) console.warn("마스터 리스트 동기화 실패:", e2.message);
-            } else {
-                friend.notes = finalNotesStr;
+            if (!supabaseClient) {
+                targetDays.forEach(idx => { currentArr[idx] = newTime; });
+                friend.notes = currentArr.join("|");
                 saveLocalBackup();
+                selectedDaysMap[friendId] = [];
+                loadServerData();
+                return;
             }
+
+            // 이 친구의 모든 주차(마스터 리스트 포함) 행을 가져온다
+            const { data: allRows, error: fetchErr } = await supabaseClient
+                .from('study_mate')
+                .select('*')
+                .eq('name', friend.name);
+            if (fetchErr) { alert("조회 실패: " + fetchErr.message); return; }
+
+            const currentMonday = parseDateKey(currentWeekDates[0].storageKey);
+
+            // 마스터 리스트(앞으로 새로 생길 주차용) + 오늘 이후 이미 만들어진 모든 주차
+            const targets = (allRows || []).filter(r => {
+                if (r.week_key === 'master_list') return true;
+                const rowMonday = parseWeekKeyDate(r.week_key);
+                return rowMonday && rowMonday >= currentMonday;
+            });
+
+            let failCount = 0;
+            for (const row of targets) {
+                const arr = parseDayTargets(row);
+                targetDays.forEach(idx => { arr[idx] = newTime; });
+                const notesStr = arr.join("|");
+                const { error: upErr } = await supabaseClient.from('study_mate').update({ notes: notesStr }).eq('id', row.id);
+                if (upErr) { failCount++; console.warn(`업데이트 실패 (${row.week_key}):`, upErr.message); }
+            }
+            if (failCount > 0) alert(`${failCount}개 주차는 저장에 실패했어요. 다시 시도해 주세요.`);
 
             selectedDaysMap[friendId] = [];
             loadServerData();
@@ -480,7 +515,7 @@
 
             if (supabaseClient) {
                 // 1. 미래 자동 복사용 마스터 명단에 추가
-                const { error: e1 } = await supabaseClient.from('study_mate').insert([{
+                const { error: e1 } = await supabaseClient.from('study_mate').upsert([{
                     id: Date.now(),
                     name: name.trim(),
                     target_start_time: time,
@@ -489,11 +524,11 @@
                     start_done_list: [false, false, false, false, false, false, false],
                     notes: defaultNotes,
                     day_off_used: false, day_off_day: 0
-                }]);
+                }], { onConflict: 'name,week_key', ignoreDuplicates: true });
                 if (e1) { alert("등록 실패 (마스터 리스트): " + e1.message); return; }
 
                 // 2. 현재 주차에도 실시간 동시 추가
-                const { error: e2 } = await supabaseClient.from('study_mate').insert([{
+                const { error: e2 } = await supabaseClient.from('study_mate').upsert([{
                     id: Date.now() + 1,
                     name: name.trim(),
                     target_start_time: time,
@@ -502,7 +537,7 @@
                     start_done_list: [false, false, false, false, false, false, false],
                     notes: defaultNotes,
                     day_off_used: false, day_off_day: 0
-                }]);
+                }], { onConflict: 'name,week_key', ignoreDuplicates: true });
                 if (e2) { alert("등록 실패 (이번 주): " + e2.message); return; }
             } else {
                 serverData.push({
