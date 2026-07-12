@@ -178,7 +178,15 @@
             if (mErr) { console.error("마스터 리스트 조회 실패:", mErr.message); return currentData; }
             if (!masters || masters.length === 0) return currentData;
 
-            const missing = masters.filter(master => !currentData.some(d => d.name === master.name));
+            const targetMonday = parseWeekKeyDate(weekKey);
+
+            const missing = masters.filter(master => {
+                if (currentData.some(d => d.name === master.name)) return false;
+                // 등록 시점(start_week_key) 이전 주차에는 자동으로 복사하지 않음
+                const startMonday = parseWeekKeyDate(master.start_week_key);
+                if (startMonday && targetMonday && targetMonday < startMonday) return false;
+                return true;
+            });
             if (missing.length === 0) return currentData;
 
             const newRows = missing.map((master, i) => {
@@ -390,7 +398,11 @@
                 const { error: upErr } = await supabaseClient.from('study_mate').update({ notes: notesStr }).eq('id', row.id);
                 if (upErr) { failCount++; console.warn(`업데이트 실패 (${row.week_key}):`, upErr.message); }
             }
-            if (failCount > 0) alert(`${failCount}개 주차는 저장에 실패했어요. 다시 시도해 주세요.`);
+            if (failCount > 0) {
+                alert(`${targets.length - failCount}개 주차는 반영됐고, ${failCount}개 주차는 저장에 실패했어요.`);
+            } else {
+                console.log(`✅ ${targets.length}개 주차(마스터 리스트 포함)에 반영 완료`);
+            }
 
             selectedDaysMap[friendId] = [];
             loadServerData();
@@ -512,14 +524,16 @@
             const picked = await openTimePicker("08:40", "목표 시작 시간 설정");
             const time = picked || "08:40";
             const defaultNotes = Array(7).fill(time).join("|");
+            const startWeekKey = getWeekStorageKey();
 
             if (supabaseClient) {
-                // 1. 미래 자동 복사용 마스터 명단에 추가
+                // 1. 미래 자동 복사용 마스터 명단에 추가 (등록 주차를 함께 기록)
                 const { error: e1 } = await supabaseClient.from('study_mate').upsert([{
                     id: Date.now(),
                     name: name.trim(),
                     target_start_time: time,
                     week_key: 'master_list',
+                    start_week_key: startWeekKey,
                     time_done_list: [false, false, false, false, false, false, false],
                     start_done_list: [false, false, false, false, false, false, false],
                     notes: defaultNotes,
