@@ -18,7 +18,7 @@
                 </div>
                 <div>
                     <h1 class="text-xl font-bold text-slate-900 tracking-tight">Study Mate Sync</h1>
-                    <p class="text-xs text-slate-500 font-medium">우리들의 실시간 목표 및 벌금 정산소</p>
+                    <p class="text-xs text-slate-500 font-medium">우리들의 실시간 상벌점 및 정산소</p>
                 </div>
             </div>
 
@@ -31,9 +31,14 @@
                 </div>
             </div>
 
-            <button onclick="addNewFriend()" class="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-4 py-2 rounded-xl transition shadow-sm cursor-pointer">
-                <i class="fa-solid fa-user-plus mr-1"></i> 친구 등록하기
-            </button>
+            <div class="flex gap-2">
+                <button onclick="openSettingsModal()" class="bg-white hover:bg-slate-50 text-slate-600 border border-slate-200 text-xs font-bold px-3 py-2 rounded-xl transition shadow-sm cursor-pointer">
+                    <i class="fa-solid fa-gear mr-1"></i> 보너스 기준
+                </button>
+                <button onclick="addNewFriend()" class="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-4 py-2 rounded-xl transition shadow-sm cursor-pointer">
+                    <i class="fa-solid fa-user-plus mr-1"></i> 친구 등록하기
+                </button>
+            </div>
         </div>
     </header>
 
@@ -51,6 +56,13 @@
             <span id="sync-status" class="text-xs bg-emerald-100 text-emerald-800 font-bold px-3 py-1.5 rounded-full flex items-center gap-1.5 shadow-xs">
                 <span class="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></span> 실시간 서버 On
             </span>
+        </div>
+
+        <div class="mb-6 bg-indigo-50 border border-indigo-100 text-indigo-700 text-xs font-semibold rounded-xl px-4 py-3 flex flex-wrap gap-x-4 gap-y-1">
+            <span>📉 공부시간 5시간 미만: -1점</span>
+            <span>📉 목표시간 미준수: -1점</span>
+            <span id="bonus-rule-text">📈 보너스 기준 이상 공부: +1점 (상쇄 가능)</span>
+            <span>💰 매주 마감 시 잔여 점수가 마이너스면 500원 × |점수| 정산, 플러스면 다음 주로 그대로 이월</span>
         </div>
 
         <div id="friends-container" class="grid grid-cols-1 md:grid-cols-2 gap-8"></div>
@@ -86,6 +98,22 @@
         </div>
     </div>
 
+    <!-- 보너스 기준 설정 모달 -->
+    <div id="settings-modal" class="fixed inset-0 bg-black/40 backdrop-blur-sm z-[100] hidden items-center justify-center px-4">
+        <div class="bg-white rounded-2xl shadow-xl w-full max-w-xs p-5">
+            <h3 class="text-sm font-bold text-slate-800 mb-2 text-center">보너스(+1점) 기준 시간</h3>
+            <p class="text-[11px] text-slate-500 text-center mb-4">이 시간 이상 공부하면 +1점을 받아요. 모두에게 공통으로 적용돼요.</p>
+            <div class="flex justify-center items-center gap-2 mb-5">
+                <select id="settings-bonus-hours" class="text-2xl font-bold text-center bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 w-32 focus:outline-none focus:ring-2 focus:ring-indigo-300"></select>
+                <span class="text-sm font-bold text-slate-500">시간</span>
+            </div>
+            <div class="flex gap-2">
+                <button onclick="closeSettingsModal(false)" class="flex-1 py-2.5 rounded-xl bg-slate-100 text-slate-600 font-bold text-sm cursor-pointer">취소</button>
+                <button onclick="closeSettingsModal(true)" class="flex-1 py-2.5 rounded-xl bg-indigo-600 text-white font-bold text-sm cursor-pointer">저장</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         const SUPABASE_URL = "https://jgmrktikgxtivsedsvmz.supabase.co";
         const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpnbXJrdGlrZ3h0aXZzZWRzdm16Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM3NzM3MzQsImV4cCI6MjA5OTM0OTczNH0.cL2BOJGYFvKtFjNloDwJOd6OwgXoJ8d8PeI1MRadEXo";
@@ -102,11 +130,17 @@
             }
         }
 
+        const SETTINGS_NAME = '__settings__';
+        const SETTINGS_WEEK_KEY = 'global_settings';
+        const FINE_PER_POINT = 500;
+        let appSettings = { bonusHours: 8 };
+
         let weekOffset = 0;
         let currentWeekDates = [];
         let serverData = [];
         let selectedDaysMap = {};
         let syncedWeeks = new Set(); // 이미 마스터 동기화를 완료한 주차 (중복 라운드트립 방지)
+        let ledgerMap = {}; // { friendName: { weekKey: {start, raw, end, fine, isComplete} } }
 
         function updateDDays() {
             const now = new Date();
@@ -118,6 +152,11 @@
             document.getElementById('mopyung-dday').innerText = ddayMopyung > 0 ? `D-${ddayMopyung}` : ddayMopyung === 0 ? `D-Day` : `D+${Math.abs(ddayMopyung)}`;
             document.getElementById('suneung-dday').innerText = ddaySuneung > 0 ? `D-${ddaySuneung}` : ddaySuneung === 0 ? `D-Day` : `D+${Math.abs(ddaySuneung)}`;
         }
+
+        function stripTime(d){ return new Date(d.getFullYear(), d.getMonth(), d.getDate()); }
+        function addDays(d, n){ const r = new Date(d); r.setDate(r.getDate()+n); return r; }
+        function isoDate(d){ return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
+        function todayISO(){ return isoDate(stripTime(new Date())); }
 
         function getWeekDates(offset) {
             const current = new Date();
@@ -144,9 +183,9 @@
             const [y, m, d] = dateKey.split('-').map(Number);
             return new Date(y, m - 1, d);
         }
-        // "week_2026-7-13" 형태의 week_key를 Date로 변환 (master_list는 null)
+        // "week_2026-7-13" 형태의 week_key를 Date로 변환 (master_list/설정용 키는 null)
         function parseWeekKeyDate(weekKey) {
-            if (!weekKey || weekKey === 'master_list' || !weekKey.startsWith('week_')) return null;
+            if (!weekKey || !weekKey.startsWith('week_')) return null;
             return parseDateKey(weekKey.replace('week_', ''));
         }
 
@@ -168,6 +207,129 @@
                 }
             } catch(e) {}
             return Array(7).fill(fallback);
+        }
+
+        // ===== 보너스 기준 설정 (Supabase에 sentinel row로 저장, 스키마 변경 불필요) =====
+        async function loadSettings() {
+            if (!supabaseClient) return;
+            try {
+                const { data, error } = await supabaseClient
+                    .from('study_mate')
+                    .select('*')
+                    .eq('name', SETTINGS_NAME)
+                    .eq('week_key', SETTINGS_WEEK_KEY)
+                    .maybeSingle();
+                if (error) { console.warn("설정 로드 실패:", error.message); return; }
+                if (data && data.notes) {
+                    try {
+                        const parsed = JSON.parse(data.notes);
+                        if (parsed && typeof parsed.bonusHours === 'number') {
+                            appSettings.bonusHours = parsed.bonusHours;
+                        }
+                    } catch(e) {}
+                }
+            } catch(e) { console.warn(e); }
+            const el = document.getElementById('bonus-rule-text');
+            if (el) el.innerText = `📈 ${appSettings.bonusHours}시간 이상 공부: +1점 (상쇄 가능)`;
+        }
+
+        async function saveSettings(bonusHours) {
+            appSettings.bonusHours = bonusHours;
+            if (!supabaseClient) return;
+            const { error } = await supabaseClient.from('study_mate').upsert([{
+                id: 1,
+                name: SETTINGS_NAME,
+                week_key: SETTINGS_WEEK_KEY,
+                notes: JSON.stringify({ bonusHours })
+            }], { onConflict: 'name,week_key' });
+            if (error) { alert("설정 저장 실패: " + error.message); }
+        }
+
+        let _settingsResolve = null;
+        function openSettingsModal() {
+            const sel = document.getElementById('settings-bonus-hours');
+            sel.innerHTML = Array.from({length: 16}, (_, i) => i + 1).map(h =>
+                `<option value="${h}" ${h === appSettings.bonusHours ? 'selected' : ''}>${h}</option>`
+            ).join('');
+            const modal = document.getElementById('settings-modal');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        }
+        async function closeSettingsModal(confirmed) {
+            const modal = document.getElementById('settings-modal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+            if (confirmed) {
+                const val = parseInt(document.getElementById('settings-bonus-hours').value, 10);
+                await saveSettings(val);
+                const el = document.getElementById('bonus-rule-text');
+                if (el) el.innerText = `📈 ${appSettings.bonusHours}시간 이상 공부: +1점 (상쇄 가능)`;
+                loadServerData();
+            }
+        }
+
+        // ===== 상/벌점 계산 =====
+        function computeRawPoints(row) {
+            const today = todayISO();
+            const weekMonday = parseWeekKeyDate(row.week_key);
+            if (!weekMonday) return 0;
+            const timeList = row.time_done_list || [false,false,false,false,false,false,false];
+            const startList = row.start_done_list || [false,false,false,false,false,false,false];
+            const bonusList = row.bonus_done_list || [false,false,false,false,false,false,false];
+            let sum = 0;
+            for (let i = 0; i < 7; i++) {
+                const dISO = isoDate(addDays(weekMonday, i));
+                if (dISO > today) continue; // 아직 안 지난 날은 집계 제외
+                if (row.day_off_used && row.day_off_day === i) continue; // day off는 집계 제외
+                if (!timeList[i]) sum -= 1;
+                if (!startList[i]) sum -= 1;
+                if (bonusList[i]) sum += 1;
+            }
+            return sum;
+        }
+
+        async function loadHistoryAndComputeLedgers() {
+            ledgerMap = {};
+            if (!supabaseClient) return;
+            try {
+                const { data: allRows, error } = await supabaseClient
+                    .from('study_mate')
+                    .select('*')
+                    .neq('week_key', 'master_list')
+                    .neq('week_key', SETTINGS_WEEK_KEY);
+                if (error) { console.warn("이력 로드 실패:", error.message); return; }
+
+                const grouped = {};
+                (allRows || []).forEach(r => {
+                    if (r.name === SETTINGS_NAME) return;
+                    if (!grouped[r.name]) grouped[r.name] = [];
+                    grouped[r.name].push(r);
+                });
+
+                Object.keys(grouped).forEach(name => {
+                    const rows = grouped[name]
+                        .filter(r => parseWeekKeyDate(r.week_key))
+                        .sort((a, b) => parseWeekKeyDate(a.week_key) - parseWeekKeyDate(b.week_key));
+                    let balance = 0;
+                    const ledger = {};
+                    rows.forEach(row => {
+                        const raw = computeRawPoints(row);
+                        const start = balance;
+                        const end = start + raw;
+                        const weekMonday = parseWeekKeyDate(row.week_key);
+                        const isComplete = addDays(weekMonday, 6) < stripTime(new Date());
+                        const fine = end < 0 ? Math.abs(end) * FINE_PER_POINT : 0;
+                        ledger[row.week_key] = { start, raw, end, fine, isComplete };
+                        balance = end >= 0 ? end : 0;
+                    });
+                    ledgerMap[name] = ledger;
+                });
+            } catch(e) { console.warn(e); }
+        }
+
+        function getLedgerFor(friend) {
+            return (ledgerMap[friend.name] && ledgerMap[friend.name][friend.week_key])
+                || { start: 0, raw: 0, end: 0, fine: 0, isComplete: false };
         }
 
         // 미래 주차 이동 시 마스터 리스트 자동 동기화 (한 주차당 1회만 수행 -> 속도 개선)
@@ -199,6 +361,7 @@
                     week_key: weekKey,
                     time_done_list: [false, false, false, false, false, false, false],
                     start_done_list: [false, false, false, false, false, false, false],
+                    bonus_done_list: [false, false, false, false, false, false, false],
                     notes: fallbackNotes,
                     day_off_used: false,
                     day_off_day: 0
@@ -257,7 +420,9 @@
                     syncedWeeks.add(weekKey);
                 }
 
-                serverData = data || [];
+                serverData = (data || []).filter(d => d.name !== SETTINGS_NAME);
+                await loadSettings();
+                await loadHistoryAndComputeLedgers();
                 setSyncStatus(true);
                 renderApp();
             } catch (err) {
@@ -421,6 +586,7 @@
             serverData.forEach(friend => {
                 if(!friend.time_done_list) friend.time_done_list = [false, false, false, false, false, false, false];
                 if(!friend.start_done_list) friend.start_done_list = [false, false, false, false, false, false, false];
+                if(!friend.bonus_done_list) friend.bonus_done_list = [false, false, false, false, false, false, false];
 
                 if(!friend.target_start_time || friend.target_start_time === "null") friend.target_start_time = "08:40";
 
@@ -428,16 +594,7 @@
 
                 let timeSuccess = friend.time_done_list.filter(v => v === true).length;
                 let startSuccess = friend.start_done_list.filter(v => v === true).length;
-                let penalty = 0;
-
-                friend.time_done_list.forEach((v, idx) => {
-                    if (friend.day_off_used && friend.day_off_day === idx) return;
-                    if (!v) penalty += 500;
-                });
-                friend.start_done_list.forEach((v, idx) => {
-                    if (friend.day_off_used && friend.day_off_day === idx) return;
-                    if (!v) penalty += 500;
-                });
+                let bonusSuccess = friend.bonus_done_list.filter(v => v === true).length;
 
                 let timeProgress = Math.round((timeSuccess / 7) * 100);
                 let targetProgress = Math.round((startSuccess / 7) * 100);
@@ -446,6 +603,16 @@
                 let dayOffText = friend.day_off_used && friend.day_off_day !== undefined ? daysKorean[friend.day_off_day] : "미사용";
 
                 const selectedDays = selectedDaysMap[friend.id] || [];
+                const ledger = getLedgerFor(friend);
+                const endLabel = ledger.isComplete ? '이번 주 마감 점수' : '현재까지 점수';
+                const endColor = ledger.end < 0 ? 'text-rose-600' : (ledger.end > 0 ? 'text-emerald-600' : 'text-slate-500');
+
+                let settleHtml;
+                if (ledger.fine > 0) {
+                    settleHtml = `<span class="text-rose-700">정산액 ${ledger.fine.toLocaleString()}원</span>`;
+                } else {
+                    settleHtml = `<span class="text-emerald-700">정산 없음 · ${ledger.end}점 다음 주로 이월</span>`;
+                }
 
                 let cardHtml = `
                     <div class="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden flex flex-col justify-between relative">
@@ -472,9 +639,10 @@
                                 }).join('')}
                             </div>
 
-                            <div class="grid grid-cols-2 gap-4 mb-4 bg-slate-50 p-3 rounded-xl border border-slate-100">
-                                <div><div class="flex justify-between text-xs font-bold text-slate-600 mb-1"><span>⏰ 공부 시간</span><span class="text-indigo-600">${timeProgress}%</span></div><div class="w-full bg-slate-200 h-1.5 rounded-full overflow-hidden"><div class="bg-indigo-600 h-full rounded-full" style="width: ${timeProgress}%"></div></div></div>
-                                <div><div class="flex justify-between text-xs font-bold text-slate-600 mb-1"><span>🎯 시작 시간</span><span class="text-emerald-600">${targetProgress}%</span></div><div class="w-full bg-slate-200 h-1.5 rounded-full overflow-hidden"><div class="bg-emerald-500 h-full rounded-full" style="width: ${targetProgress}%"></div></div></div>
+                            <div class="grid grid-cols-3 gap-2 mb-4 bg-slate-50 p-3 rounded-xl border border-slate-100">
+                                <div><div class="text-[10px] font-bold text-slate-500 mb-1">⏰ 5h+</div><div class="text-indigo-600 font-extrabold text-sm">${timeProgress}%</div></div>
+                                <div><div class="text-[10px] font-bold text-slate-500 mb-1">🎯 목표시간</div><div class="text-emerald-600 font-extrabold text-sm">${targetProgress}%</div></div>
+                                <div><div class="text-[10px] font-bold text-slate-500 mb-1">📈 보너스</div><div class="text-amber-600 font-extrabold text-sm">${bonusSuccess}/7일</div></div>
                             </div>
 
                             <div class="space-y-3">
@@ -488,7 +656,7 @@
                                 </div>
 
                                 <div class="grid grid-cols-8 items-center text-center">
-                                    <div class="text-[11px] font-bold text-slate-500 text-left">공부시간</div>
+                                    <div class="text-[11px] font-bold text-slate-500 text-left">공부 5h+</div>
                                     ${friend.time_done_list.map((v, idx) => `
                                         <div class="flex justify-center">
                                             <button onclick="toggleCheck(${friend.id}, ${idx}, 'time_done_list', ${v})" class="w-6 h-6 rounded-md flex items-center justify-center border text-xs cursor-pointer ${friend.day_off_used && friend.day_off_day === idx ? 'bg-amber-100 border-amber-100 text-amber-600' : v ? 'bg-indigo-50 border-indigo-200 text-indigo-600 font-bold' : 'bg-white border-slate-200'}">
@@ -498,7 +666,7 @@
                                     `).join('')}
                                 </div>
                                 <div class="grid grid-cols-8 items-center text-center">
-                                    <div class="text-[11px] font-bold text-slate-500 text-left">시작시간</div>
+                                    <div class="text-[11px] font-bold text-slate-500 text-left">목표시간</div>
                                     ${friend.start_done_list.map((v, idx) => `
                                         <div class="flex justify-center">
                                             <button onclick="toggleCheck(${friend.id}, ${idx}, 'start_done_list', ${v})" class="w-6 h-6 rounded-md flex items-center justify-center border text-xs cursor-pointer ${friend.day_off_used && friend.day_off_day === idx ? 'bg-amber-100 border-amber-100 text-amber-600' : v ? 'bg-emerald-50 border-emerald-200 text-emerald-600 font-bold' : 'bg-white border-slate-200'}">
@@ -507,11 +675,28 @@
                                         </div>
                                     `).join('')}
                                 </div>
+                                <div class="grid grid-cols-8 items-center text-center">
+                                    <div class="text-[11px] font-bold text-slate-500 text-left">보너스(${appSettings.bonusHours}h+)</div>
+                                    ${friend.bonus_done_list.map((v, idx) => `
+                                        <div class="flex justify-center">
+                                            <button onclick="toggleCheck(${friend.id}, ${idx}, 'bonus_done_list', ${v})" class="w-6 h-6 rounded-md flex items-center justify-center border text-xs cursor-pointer ${friend.day_off_used && friend.day_off_day === idx ? 'bg-amber-100 border-amber-100 text-amber-600' : v ? 'bg-amber-50 border-amber-200 text-amber-600 font-bold' : 'bg-white border-slate-200'}">
+                                                ${friend.day_off_used && friend.day_off_day === idx ? '☁️' : v ? '★' : '·'}
+                                            </button>
+                                        </div>
+                                    `).join('')}
+                                </div>
                             </div>
                         </div>
-                        <div class="bg-rose-50 px-6 py-3.5 border-t border-rose-100 flex justify-between items-center">
-                            <span class="text-xs font-bold text-rose-700">이번 주 누적 벌금</span>
-                            <span class="text-sm font-extrabold text-rose-700">${penalty.toLocaleString()}원</span>
+                        <div class="bg-slate-50 px-6 py-3.5 border-t border-slate-100">
+                            <div class="flex justify-between items-center text-[11px] text-slate-500 font-semibold mb-1">
+                                <span>이번 주 시작 잔고 ${ledger.start}점</span>
+                                <span>변동 ${ledger.raw >= 0 ? '+' : ''}${ledger.raw}점</span>
+                            </div>
+                            <div class="flex justify-between items-center">
+                                <span class="text-xs font-bold text-slate-600">${endLabel}</span>
+                                <span class="text-sm font-extrabold ${endColor}">${ledger.end}점</span>
+                            </div>
+                            <div class="text-[11px] font-bold text-right mt-1">${settleHtml}</div>
                         </div>
                     </div>`;
                 container.innerHTML += cardHtml;
@@ -521,11 +706,13 @@
         async function addNewFriend() {
             const name = prompt("새로운 친구 이름을 입력하세요:");
             if(!name || name.trim() === "") return;
+            if(name.trim() === SETTINGS_NAME) { alert("사용할 수 없는 이름이에요."); return; }
 
             const picked = await openTimePicker("08:40", "목표 시작 시간 설정");
             const time = picked || "08:40";
             const defaultNotes = Array(7).fill(time).join("|");
             const startWeekKey = getWeekStorageKey();
+            const blank7 = [false, false, false, false, false, false, false];
 
             if (supabaseClient) {
                 // 1. 미래 자동 복사용 마스터 명단에 추가 (등록 주차를 함께 기록)
@@ -535,8 +722,9 @@
                     target_start_time: time,
                     week_key: 'master_list',
                     start_week_key: startWeekKey,
-                    time_done_list: [false, false, false, false, false, false, false],
-                    start_done_list: [false, false, false, false, false, false, false],
+                    time_done_list: blank7,
+                    start_done_list: blank7,
+                    bonus_done_list: blank7,
                     notes: defaultNotes,
                     day_off_used: false, day_off_day: 0
                 }], { onConflict: 'name,week_key', ignoreDuplicates: true });
@@ -549,8 +737,9 @@
                     target_start_time: time,
                     week_key: getWeekStorageKey(),
                     start_week_key: startWeekKey,
-                    time_done_list: [false, false, false, false, false, false, false],
-                    start_done_list: [false, false, false, false, false, false, false],
+                    time_done_list: blank7,
+                    start_done_list: blank7,
+                    bonus_done_list: blank7,
                     notes: defaultNotes,
                     day_off_used: false, day_off_day: 0
                 }], { onConflict: 'name,week_key', ignoreDuplicates: true });
@@ -558,8 +747,7 @@
             } else {
                 serverData.push({
                     id: Date.now(), name: name.trim(), target_start_time: time, week_key: getWeekStorageKey(),
-                    time_done_list: [false, false, false, false, false, false, false],
-                    start_done_list: [false, false, false, false, false, false, false],
+                    time_done_list: blank7, start_done_list: blank7, bonus_done_list: blank7,
                     notes: defaultNotes,
                     day_off_used: false, day_off_day: 0
                 });
@@ -572,7 +760,7 @@
             const friend = serverData.find(f => f.id === id);
             if(friend) {
                 if(friend.day_off_used && friend.day_off_day === index) return;
-                let newList = [...friend[listName]];
+                let newList = [...(friend[listName] || [false,false,false,false,false,false,false])];
                 newList[index] = !currentVal;
 
                 if (supabaseClient) {
