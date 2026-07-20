@@ -53,7 +53,7 @@ body.study-shell ::selection {
 .study-header-inner,
 .study-rulebar,
 .study-main {
-    width: min(100%, 760px);
+    width: min(100%, 1120px);
     margin: 0 auto;
 }
 
@@ -168,7 +168,7 @@ body.study-shell ::selection {
 }
 
 .study-main {
-    padding: 24px 20px 88px !important;
+    padding: 24px 28px 88px !important;
 }
 
 .study-toolbar {
@@ -217,7 +217,42 @@ body.study-shell ::selection {
 }
 
 #friends-container {
-    gap: 16px !important;
+    display: flex !important;
+    flex-direction: column;
+    gap: 12px !important;
+}
+
+.ledger-summary {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    border: 1px solid var(--faint);
+    background: var(--soft-bg);
+}
+
+.ledger-summary > div {
+    min-width: 0;
+    padding: 13px 14px;
+    border-left: 1px dashed var(--faint);
+}
+
+.ledger-summary > div:first-child {
+    border-left: 0;
+}
+
+.ledger-label {
+    display: block;
+    margin-bottom: 6px;
+    color: var(--muted);
+    font-size: 9px;
+    letter-spacing: 0.14em;
+}
+
+.ledger-summary strong {
+    display: block;
+    color: var(--ink);
+    font-size: 18px;
+    font-weight: 600;
+    line-height: 1.1;
 }
 
 .friend-card {
@@ -227,8 +262,53 @@ body.study-shell ::selection {
     box-shadow: none !important;
 }
 
-.friend-card .card-body {
-    padding: 18px !important;
+.ledger-row {
+    display: grid !important;
+    grid-template-columns: minmax(190px, 0.34fr) minmax(560px, 1fr) minmax(260px, 0.38fr);
+    align-items: stretch;
+}
+
+.ledger-row-head,
+.ledger-row-body,
+.ledger-row-foot {
+    min-width: 0;
+}
+
+.ledger-row-head {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    gap: 18px;
+    padding: 16px;
+    border-right: 1px solid var(--faint);
+}
+
+.ledger-person {
+    display: flex;
+    align-items: flex-start;
+    gap: 9px;
+    min-width: 0;
+}
+
+.ledger-person h3 {
+    word-break: break-word;
+}
+
+.ledger-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.ledger-row-body {
+    padding: 14px 16px;
+    border-right: 1px solid var(--faint);
+}
+
+.ledger-row-foot {
+    display: grid;
+    grid-template-columns: 1fr;
+    background: var(--panel-bg);
 }
 
 .friend-card h3 {
@@ -248,6 +328,7 @@ body.study-shell ::selection {
     font-size: 10px !important;
     font-weight: 400 !important;
     letter-spacing: 0.05em;
+    line-height: 1.6;
 }
 
 .card-action-link {
@@ -332,8 +413,9 @@ body.study-shell ::selection {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 0 !important;
-    border-top: 1px solid var(--faint) !important;
+    border-top: 0 !important;
     background: var(--soft-bg) !important;
+    padding: 0 !important;
 }
 
 .score-summary > div {
@@ -361,6 +443,7 @@ body.study-shell ::selection {
 .fine-summary {
     border-top: 1px solid var(--faint) !important;
     background: var(--panel-bg) !important;
+    padding: 12px 14px !important;
 }
 
 .fine-summary span {
@@ -420,6 +503,18 @@ body.study-shell ::selection {
     }
 }
 
+@media (min-width: 1280px) {
+    .study-header-inner,
+    .study-rulebar,
+    .study-main {
+        width: min(100%, 1240px);
+    }
+
+    .ledger-row {
+        grid-template-columns: minmax(210px, 0.32fr) minmax(680px, 1fr) minmax(300px, 0.36fr);
+    }
+}
+
 @media (max-width: 640px) {
     .study-brand {
         align-items: flex-start;
@@ -437,7 +532,38 @@ body.study-shell ::selection {
         font-size: 10px !important;
     }
 
-    .friend-card .card-body {
-        padding: 14px !important;
+    .ledger-summary {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .ledger-summary > div:nth-child(odd) {
+        border-left: 0;
+    }
+
+    .ledger-summary > div:nth-child(n + 3) {
+        border-top: 1px dashed var(--faint);
+    }
+
+    .ledger-row {
+        grid-template-columns: 1fr;
+    }
+
+    .ledger-row-head,
+    .ledger-row-body {
+        border-right: 0;
+        border-bottom: 1px solid var(--faint);
+    }
+
+    .ledger-row-head {
+        gap: 12px;
+    }
+
+    .ledger-row-body {
+        overflow-x: auto;
+    }
+
+    .card-grid,
+    .day-selector-group {
+        min-width: 520px;
     }
 }

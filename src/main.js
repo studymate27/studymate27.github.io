@@ -277,11 +277,11 @@ function attachDragHandlers(handleEl, cardEl) {
 
 // 전역 리스너는 딱 한 번만 등록
 window.addEventListener('pointermove', (e) => {
-    if (!dragState.dragging || !dragState.cardEl) return;
-    const container = document.getElementById('friends-container');
-    const cardEl = dragState.cardEl;
-    const siblings = [...container.children].filter(el => el !== cardEl);
-    for (const el of siblings) {
+            if (!dragState.dragging || !dragState.cardEl) return;
+            const container = document.getElementById('friends-container');
+            const cardEl = dragState.cardEl;
+            const siblings = [...container.querySelectorAll('.friend-card')].filter(el => el !== cardEl);
+            for (const el of siblings) {
         const rect = el.getBoundingClientRect();
         if (e.clientY > rect.top && e.clientY < rect.bottom) {
             const els = [...container.children];
@@ -367,46 +367,78 @@ function renderApp() {
     today.setHours(0,0,0,0);
 
     const orderedData = applyLocalOrder(serverData);
-
-    orderedData.forEach(friend => {
+    const viewRows = orderedData.map(friend => {
         if(!friend.start_done_list) friend.start_done_list = [false, false, false, false, false, false, false];
         if(!friend.study_done_list || friend.study_done_list.length !== 7) friend.study_done_list = [false,false,false,false,false,false,false];
         if(!friend.bonus_done_list || friend.bonus_done_list.length !== 7) friend.bonus_done_list = [false,false,false,false,false,false,false];
         if(!friend.target_start_time || friend.target_start_time === "null") friend.target_start_time = "08:40";
 
-        let dayTargets = parseDayTargets(friend);
+        const dayTargets = parseDayTargets(friend);
         const selectedDays = selectedDaysMap[friend.id] || [];
         const daysKorean = ["월요일", "화요일", "수요일", "목요일", "금요일", "토요일", "일요일"];
-        let dayOffText = friend.day_off_used && friend.day_off_day !== undefined ? daysKorean[friend.day_off_day] : "미사용";
+        const dayOffText = friend.day_off_used && friend.day_off_day !== undefined ? daysKorean[friend.day_off_day] : "미사용";
 
-        // 상점/벌점 잔고 계산
         const master = masterByName[friend.name];
         const startWeekKey = (master && master.start_week_key) ? master.start_week_key : friend.week_key;
         const weeksMap = rowsByNameWeek[friend.name] || {};
         weeksMap[weekKey] = friend; // 이번 주는 화면에 그려지는 최신 friend 객체를 그대로 사용
         const score = computeScoreChain(friend.name, weekKey, weeksMap, startWeekKey);
         const fineAmount = score.final < 0 ? Math.abs(score.final) * 500 : 0;
+        const checkedCount = friend.study_done_list.filter(Boolean).length + friend.start_done_list.filter(Boolean).length + friend.bonus_done_list.filter(Boolean).length;
+        const dayOffCount = friend.day_off_used ? 1 : 0;
+
+        return { friend, dayTargets, selectedDays, dayOffText, score, fineAmount, checkedCount, dayOffCount };
+    });
+
+    const totalFine = viewRows.reduce((sum, row) => sum + row.fineAmount, 0);
+    const negativeCount = viewRows.filter(row => row.score.final < 0).length;
+    const weeklyChange = viewRows.reduce((sum, row) => sum + row.score.rawChange, 0);
+    const activeMembers = viewRows.length;
+
+    container.innerHTML = `
+        <section class="ledger-summary">
+            <div>
+                <span class="ledger-label">TOTAL FINE</span>
+                <strong>${totalFine.toLocaleString()}원</strong>
+            </div>
+            <div>
+                <span class="ledger-label">NEGATIVE</span>
+                <strong>${negativeCount}/${activeMembers}</strong>
+            </div>
+            <div>
+                <span class="ledger-label">WEEK DELTA</span>
+                <strong>${weeklyChange >= 0 ? '+' : ''}${weeklyChange}</strong>
+            </div>
+            <div>
+                <span class="ledger-label">MEMBERS</span>
+                <strong>${activeMembers}</strong>
+            </div>
+        </section>
+    `;
+
+    viewRows.forEach(({ friend, dayTargets, selectedDays, dayOffText, score, fineAmount, checkedCount }) => {
 
         let cardHtml = `
-            <div class="friend-card bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden flex flex-col justify-between relative">
-                <div class="card-body p-6">
-                    <div class="flex justify-between items-start mb-4">
+            <section class="friend-card ledger-row bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden relative">
+                <div class="ledger-row-head">
+                    <div class="ledger-person">
+                        <span class="drag-handle text-slate-300 hover:text-slate-500 cursor-grab select-none text-base leading-none touch-none" title="꾹 눌러서 순서 변경">⠿</span>
                         <div>
-                            <div class="flex items-center gap-2">
-                                <span class="drag-handle text-slate-300 hover:text-slate-500 cursor-grab select-none text-base leading-none touch-none" title="꾹 눌러서 순서 변경">⠿</span>
-                                <h3 class="text-lg font-bold text-slate-900">${friend.name}</h3>
-                                <button onclick="deleteFriend(${friend.id}, '${friend.name}')" class="text-xs text-slate-300 hover:text-rose-500 font-bold transition cursor-pointer p-0.5"><i class="fa-solid fa-circle-xmark"></i></button>
-                            </div>
-                            <div class="card-hint text-[11px] text-slate-500 font-medium mt-1">
-                                요일 선택 후 <button onclick="editSelectedDaysTarget(${friend.id})" class="card-action-link text-indigo-600 font-bold underline cursor-pointer bg-indigo-50 px-2 py-0.5 rounded-md hover:bg-indigo-100 transition">선택 요일 목표 변경</button>
-                            </div>
+                            <h3 class="text-lg font-bold text-slate-900">${friend.name}</h3>
+                            <p class="card-hint">${checkedCount}/21 checks · ${dayOffText}</p>
                         </div>
+                        <button onclick="deleteFriend(${friend.id}, '${friend.name}')" class="delete-button text-xs text-slate-300 hover:text-rose-500 font-bold transition cursor-pointer p-0.5"><i class="fa-solid fa-circle-xmark"></i></button>
+                    </div>
+                    <div class="ledger-actions">
+                        <button onclick="editSelectedDaysTarget(${friend.id})" class="card-action-link text-indigo-600 font-bold underline cursor-pointer bg-indigo-50 px-2 py-0.5 rounded-md hover:bg-indigo-100 transition">목표 변경</button>
                         <button onclick="setDayOff(${friend.id})" class="dayoff-button ${friend.day_off_used ? 'is-active' : ''} text-xs font-bold px-3 py-1.5 rounded-xl border transition cursor-pointer ${friend.day_off_used ? 'bg-amber-100 border-amber-200 text-amber-800' : 'bg-white border-slate-200 text-slate-600'}">
-                            <i class="fa-solid fa-cloud text-[11px] mr-1"></i> Day Off: ${dayOffText}
+                            Day Off
                         </button>
                     </div>
+                </div>
 
-                    <div class="day-selector-group flex gap-1 mb-4 bg-slate-50 p-1.5 rounded-xl border border-slate-100 justify-between">
+                <div class="ledger-row-body">
+                    <div class="day-selector-group flex gap-1 bg-slate-50 p-1.5 rounded-xl border border-slate-100 justify-between">
                         ${["월", "화", "수", "목", "금", "토", "일"].map((day, idx) => {
                             const isSelected = selectedDays.includes(idx);
                             return `<button onclick="toggleDaySelection(${friend.id}, ${idx})" class="day-selector ${isSelected ? 'is-selected' : ''} flex-1 text-xs py-1 rounded-lg font-bold transition cursor-pointer ${isSelected ? 'bg-indigo-600 text-white shadow-xs' : 'bg-white text-slate-600 border border-slate-200/60 hover:bg-slate-50'}">${day}</button>`;
@@ -473,7 +505,8 @@ function renderApp() {
                         </div>
                     </div>
                 </div>
-                <div class="score-summary bg-indigo-50/70 px-6 py-3 border-t border-indigo-100 grid grid-cols-3 gap-2 text-center">
+                <div class="ledger-row-foot">
+                    <div class="score-summary bg-indigo-50/70 px-6 py-3 border-t border-indigo-100 grid grid-cols-3 gap-2 text-center">
                     <div>
                         <div class="score-label text-[10px] text-indigo-400 font-bold">이월 점수</div>
                         <div class="score-value text-sm font-extrabold text-indigo-700">${score.carryIn >= 0 ? '+' : ''}${score.carryIn}</div>
@@ -486,18 +519,20 @@ function renderApp() {
                         <div class="score-label text-[10px] text-indigo-400 font-bold">현재 잔여</div>
                         <div class="score-value text-sm font-extrabold ${score.final >= 0 ? 'text-emerald-700' : 'text-rose-700'}">${score.final >= 0 ? '+' : ''}${score.final}</div>
                     </div>
+                    </div>
+                    <div class="fine-summary bg-rose-50 px-6 py-3.5 border-t border-rose-100 flex justify-between items-center">
+                        <span class="text-xs font-bold text-rose-700">정산 예정 금액</span>
+                        <span class="text-sm font-extrabold text-rose-700">${fineAmount.toLocaleString()}원</span>
+                    </div>
                 </div>
-                <div class="fine-summary bg-rose-50 px-6 py-3.5 border-t border-rose-100 flex justify-between items-center">
-                    <span class="text-xs font-bold text-rose-700">정산 예정 금액</span>
-                    <span class="text-sm font-extrabold text-rose-700">${fineAmount.toLocaleString()}원</span>
-                </div>
-            </div>`;
+            </section>`;
         container.innerHTML += cardHtml;
     });
 
     // 렌더링 완료 후 각 카드에 이름 태그 + 드래그 핸들러 부착 (순서 저장을 위함)
-    [...container.children].forEach((cardEl, idx) => {
-        const friend = orderedData[idx];
+    [...container.querySelectorAll('.friend-card')].forEach((cardEl, idx) => {
+        const row = viewRows[idx];
+        const friend = row && row.friend;
         if (!friend) return;
         cardEl.dataset.name = friend.name;
         const handle = cardEl.querySelector('.drag-handle');
