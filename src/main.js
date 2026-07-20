@@ -130,8 +130,8 @@ async function syncWithMasterList(weekKey, currentData, masters) {
 function setSyncStatus(ok, message) {
     const el = document.getElementById('sync-status');
     if (ok) {
-        el.className = "text-xs bg-emerald-100 text-emerald-800 font-bold px-3 py-1.5 rounded-full flex items-center gap-1.5 shadow-xs";
-        el.innerHTML = `<span class="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></span> ${message || '실시간 서버 On'}`;
+        el.className = "hidden";
+        el.innerHTML = "";
     } else {
         el.className = "text-xs bg-amber-100 text-amber-800 font-bold px-3 py-1.5 rounded-full flex items-center gap-1.5 shadow-xs";
         el.innerHTML = `<span class="w-1.5 h-1.5 bg-amber-500 rounded-full"></span> ${message || '서버 연결 오류'}`;

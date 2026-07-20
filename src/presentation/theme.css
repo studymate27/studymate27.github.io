@@ -92,6 +92,10 @@ body.study-shell ::selection {
     letter-spacing: 0.12em;
 }
 
+.study-subtitle:empty {
+    display: none;
+}
+
 .study-metrics {
     display: flex;
     flex-wrap: wrap;
