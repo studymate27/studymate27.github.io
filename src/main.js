@@ -520,8 +520,8 @@ function moveDraggedCard(clientY) {
             const els = [...container.children];
             const cardIndex = els.indexOf(cardEl);
             const targetIndex = els.indexOf(el);
-            const downThreshold = rect.top + rect.height / 3;
-            const upThreshold = rect.bottom - rect.height / 3;
+            const downThreshold = rect.top + rect.height / 5;
+            const upThreshold = rect.bottom - rect.height / 5;
             const movingDown = direction > 0 && targetIndex > cardIndex && clientY > downThreshold;
             const movingUp = direction < 0 && targetIndex < cardIndex && clientY < upThreshold;
             if (!movingDown && !movingUp) break;
