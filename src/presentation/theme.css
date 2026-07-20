@@ -690,6 +690,11 @@ body.study-shell ::selection {
     color: var(--muted) !important;
 }
 
+.fine-paid-button:disabled {
+    opacity: 0.38;
+    cursor: default !important;
+}
+
 .text-emerald-600,
 .text-emerald-700 {
     color: var(--success) !important;
@@ -921,6 +926,14 @@ body.study-shell ::selection {
 
     .ledger-row {
         grid-template-columns: 1fr;
+    }
+
+    .friend-card,
+    .friend-card * {
+        -webkit-tap-highlight-color: transparent;
+        -webkit-touch-callout: none;
+        -webkit-user-select: none;
+        user-select: none;
     }
 
     .ledger-row-head,

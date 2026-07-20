@@ -389,12 +389,45 @@ function finalizeOrderFromDOM() {
 // 손을 떼면 이 기기에 순서를 저장한다.
 // (window 리스너는 렌더할 때마다 쌓이지 않도록 한 번만 등록하고, 전역 상태로 어떤 카드가
 //  드래그 중인지 추적한다.)
-const dragState = { cardEl: null, dragging: false, lastY: 0 };
+const LONG_PRESS_REORDER_MS = 1000;
+const dragState = {
+    cardEl: null,
+    dragging: false,
+    lastY: 0,
+    longPressTimer: null,
+    pressX: 0,
+    pressY: 0,
+    suppressClick: false
+};
+
+function clearLongPress() {
+    if (dragState.longPressTimer) {
+        clearTimeout(dragState.longPressTimer);
+        dragState.longPressTimer = null;
+    }
+}
+
+function startCardDrag(cardEl, sourceEl, pointerId, clientY) {
+    clearLongPress();
+    if (dragState.dragging) return;
+    dragState.dragging = true;
+    dragState.cardEl = cardEl;
+    dragState.lastY = clientY;
+    cardEl.classList.add('is-dragging');
+    try { sourceEl.setPointerCapture(pointerId); } catch(e2) {}
+    if (navigator.vibrate) navigator.vibrate(15);
+}
 
 function endDragGlobal() {
+    clearLongPress();
     if (dragState.dragging && dragState.cardEl) {
         dragState.cardEl.classList.remove('is-dragging');
         finalizeOrderFromDOM();
+    }
+    if (dragState.suppressClick) {
+        setTimeout(() => {
+            dragState.suppressClick = false;
+        }, 350);
     }
     dragState.dragging = false;
     dragState.cardEl = null;
@@ -404,15 +437,31 @@ function endDragGlobal() {
 function attachDragHandlers(handleEl, cardEl) {
     handleEl.addEventListener('pointerdown', (e) => {
         e.preventDefault();
-        dragState.dragging = true;
-        dragState.cardEl = cardEl;
-        dragState.lastY = e.clientY;
-        cardEl.classList.add('is-dragging');
-        try { handleEl.setPointerCapture(e.pointerId); } catch(e2) {}
-        if (navigator.vibrate) navigator.vibrate(15);
+        startCardDrag(cardEl, handleEl, e.pointerId, e.clientY);
     });
     handleEl.addEventListener('pointerup', endDragGlobal);
     handleEl.addEventListener('pointercancel', endDragGlobal);
+}
+
+function attachCardLongPress(cardEl) {
+    cardEl.addEventListener('pointerdown', (e) => {
+        if (!window.matchMedia('(max-width: 640px)').matches) return;
+        if (dragState.dragging) return;
+        clearLongPress();
+        dragState.pressX = e.clientX;
+        dragState.pressY = e.clientY;
+        dragState.longPressTimer = setTimeout(() => {
+            dragState.suppressClick = true;
+            startCardDrag(cardEl, cardEl, e.pointerId, e.clientY);
+        }, LONG_PRESS_REORDER_MS);
+    });
+    cardEl.addEventListener('pointermove', (e) => {
+        if (!dragState.longPressTimer) return;
+        const moved = Math.hypot(e.clientX - dragState.pressX, e.clientY - dragState.pressY);
+        if (moved > 8) clearLongPress();
+    });
+    cardEl.addEventListener('pointerup', clearLongPress);
+    cardEl.addEventListener('pointercancel', clearLongPress);
 }
 
 function animateCardReorder(container, move) {
@@ -470,6 +519,12 @@ window.addEventListener('pointermove', (e) => {
     }
 });
 window.addEventListener('pointerup', () => { if (dragState.dragging) endDragGlobal(); });
+window.addEventListener('click', (e) => {
+    if (!dragState.suppressClick) return;
+    e.preventDefault();
+    e.stopPropagation();
+    dragState.suppressClick = false;
+}, true);
 
 async function editSelectedDaysTarget(friendId) {
     const friend = serverData.find(f => f.id === friendId);
@@ -555,13 +610,14 @@ function renderApp() {
         const fineTone = fineAmount > 0 ? "is-negative" : score.final > 0 ? "is-positive" : "is-zero";
         const fineDisplay = fineAmount > 0 ? `-₩${fineAmount.toLocaleString()}` : `₩${fineAmount.toLocaleString()}`;
         const paymentTone = finePaid ? "is-paid" : currentWeekEnded && fineAmount > 0 ? "is-overdue" : "is-open";
+        const paymentDisabled = !currentWeekEnded;
 
-        return { friend, dayTargets, dayOffDays, score, fineAmount, fineDisplay, finePaid, currentWeekPaid, fineTone, paymentTone };
+        return { friend, dayTargets, dayOffDays, score, fineAmount, fineDisplay, finePaid, currentWeekPaid, fineTone, paymentTone, paymentDisabled };
     });
 
     container.innerHTML = "";
 
-    viewRows.forEach(({ friend, dayTargets, dayOffDays, score, fineAmount, fineDisplay, finePaid, currentWeekPaid, fineTone, paymentTone }) => {
+    viewRows.forEach(({ friend, dayTargets, dayOffDays, score, fineAmount, fineDisplay, finePaid, currentWeekPaid, fineTone, paymentTone, paymentDisabled }) => {
 
         let cardHtml = `
             <section class="friend-card ledger-row bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden relative">
@@ -648,7 +704,7 @@ function renderApp() {
                 </div>
                 <div class="ledger-row-foot">
                     <div class="fine-summary bg-rose-50 px-6 py-3.5 border-t border-rose-100 flex justify-between items-center ${fineTone} ${finePaid ? 'is-paid' : ''}">
-                        <button onclick="toggleFinePaid(${friend.id})" class="fine-paid-button ${paymentTone} ${currentWeekPaid ? 'is-current-paid' : ''} cursor-pointer" aria-pressed="${currentWeekPaid}">
+                        <button onclick="toggleFinePaid(${friend.id})" ${paymentDisabled ? 'disabled' : ''} class="fine-paid-button ${paymentTone} ${currentWeekPaid ? 'is-current-paid' : ''} cursor-pointer" aria-pressed="${currentWeekPaid}">
                             입금
                         </button>
                         <span class="fine-amount text-sm font-extrabold text-rose-700">${fineDisplay}</span>
@@ -664,6 +720,7 @@ function renderApp() {
         const friend = row && row.friend;
         if (!friend) return;
         cardEl.dataset.name = friend.name;
+        attachCardLongPress(cardEl);
         const handle = cardEl.querySelector('.drag-handle');
         if (handle) attachDragHandlers(handle, cardEl);
     });
@@ -782,6 +839,11 @@ async function toggleCheck(id, index, listName, currentVal) {
 }
 
 async function toggleFinePaid(id) {
+    const currentWeekEnd = parseDateKey(currentWeekDates[6].storageKey);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    if (currentWeekEnd >= today) return;
+
     const friend = serverData.find(f => f.id === id);
     if (!friend) return;
     const nextPaid = !isFinePaid(friend);
