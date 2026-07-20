@@ -185,6 +185,13 @@ body.study-shell ::selection {
     font-weight: 500 !important;
 }
 
+.study-modal-button {
+    min-height: 32px !important;
+    padding: 0 12px !important;
+    font-size: 10px !important;
+    line-height: 1 !important;
+}
+
 .study-chip span,
 .study-chip-button span {
     color: var(--ink) !important;
@@ -396,6 +403,9 @@ body.study-shell ::selection {
     inset: 0 auto 0 0;
     z-index: 5;
     width: 18px;
+    padding: 0;
+    border: 0;
+    background: transparent;
     color: transparent !important;
     cursor: grab;
     touch-action: none;
@@ -421,6 +431,26 @@ body.study-shell ::selection {
 
 .friend-card.is-dragging .drag-handle {
     cursor: grabbing;
+}
+
+@media (max-width: 767px) {
+    .drag-handle {
+        position: static;
+        width: auto;
+        min-height: 30px;
+        padding: 0 10px;
+        border: 1px solid var(--faint);
+        border-radius: var(--radius);
+        background: var(--panel-bg);
+        color: var(--muted) !important;
+        font-size: 10px;
+        font-weight: 600;
+        letter-spacing: 0.06em;
+    }
+
+    .drag-handle::after {
+        display: none;
+    }
 }
 
 .card-hint {
@@ -499,6 +529,16 @@ body.study-shell ::selection {
     opacity: 0.72;
 }
 
+.mark-button.is-locked,
+.mark-button:disabled {
+    border-style: dashed !important;
+    border-color: var(--faint) !important;
+    background: transparent !important;
+    color: transparent !important;
+    opacity: 0.38;
+    cursor: default !important;
+}
+
 .mark-button.is-off {
     font-size: 8px !important;
     letter-spacing: 0.04em;
@@ -533,12 +573,21 @@ body.study-shell ::selection {
 }
 
 .target-row {
-    border: 1px solid var(--grid);
-    border-radius: var(--radius) !important;
-    background: var(--soft-bg) !important;
+    background: transparent !important;
     color: var(--ink) !important;
     font-size: 9px !important;
     font-weight: 500 !important;
+}
+
+.target-values {
+    grid-column: span 7;
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    align-items: center;
+    min-height: 22px;
+    border: 1px solid var(--grid);
+    border-radius: var(--radius);
+    background: var(--soft-bg);
 }
 
 .row-label {
@@ -714,6 +763,71 @@ body.study-shell ::selection {
     outline: none !important;
 }
 
+.setting-picker-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    margin-bottom: 18px;
+    min-height: 42px;
+}
+
+.setting-picker-row span,
+#bonus-picker-modal .setting-picker-row span,
+#fine-unit-picker-modal .setting-picker-row span {
+    color: var(--muted) !important;
+    font-size: 13px !important;
+    font-weight: 700 !important;
+    line-height: 1 !important;
+    white-space: nowrap;
+}
+
+.setting-number-input,
+#bonus-hour-input,
+#fine-unit-input {
+    width: 96px;
+    height: 42px !important;
+    border: 1px solid var(--faint) !important;
+    border-radius: var(--radius) !important;
+    background: var(--soft-bg) !important;
+    color: var(--ink) !important;
+    box-shadow: none !important;
+    outline: none !important;
+    padding: 0 10px;
+    text-align: center;
+    font-size: 18px !important;
+    font-weight: 700 !important;
+    line-height: 42px !important;
+    caret-color: var(--ink);
+    appearance: textfield;
+    -moz-appearance: textfield;
+}
+
+.setting-number-input.is-wide,
+#fine-unit-input {
+    width: 112px;
+}
+
+.setting-number-input:focus,
+.setting-number-input:focus-visible,
+.setting-number-input:invalid,
+#bonus-hour-input:focus,
+#bonus-hour-input:focus-visible,
+#fine-unit-input:focus,
+#fine-unit-input:focus-visible,
+.setting-number-input:user-invalid {
+    border-color: var(--faint) !important;
+    box-shadow: none !important;
+    outline: none !important;
+}
+
+.setting-number-input::-webkit-outer-spin-button,
+.setting-number-input::-webkit-inner-spin-button {
+    margin: 0;
+    appearance: none;
+    -webkit-appearance: none;
+}
+
 .dayoff-week-fields {
     display: grid;
     grid-template-columns: repeat(7, minmax(0, 1fr));
@@ -750,7 +864,10 @@ body.study-shell ::selection {
 
 .modal-actions .study-modal-button {
     flex: 1;
-    min-height: 40px;
+    min-height: 32px;
+    padding: 0 12px !important;
+    font-size: 10px !important;
+    line-height: 1 !important;
 }
 
 .target-week-title {

@@ -50,6 +50,15 @@ function isDayOff(friend, dayIndex) {
     return dayOffIndices(friend).includes(dayIndex);
 }
 
+function isFutureDayIndex(dayIndex) {
+    const dateInfo = currentWeekDates[dayIndex];
+    if (!dateInfo) return false;
+    const day = parseDateKey(dateInfo.storageKey);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return day > today;
+}
+
 function readRowMeta(row) {
     if (!row || !row.Notes) return {};
     try {
@@ -135,11 +144,15 @@ function updateMinimumLabel() {
 
 function updateFineUnitLabel() {
     const el = document.getElementById('fine-unit-label');
-    if (el) el.innerText = `${fineUnit.toLocaleString()}원`;
+    if (el) el.innerText = `₩${fineUnit.toLocaleString()}`;
 }
 
 function formatBonusShortLabel() {
     return `${Number.isInteger(bonusHours) ? bonusHours : bonusHours.toFixed(1)}h +`;
+}
+
+function formatMinimumShortLabel() {
+    return `${Number.isInteger(minimumHours) ? minimumHours : minimumHours.toFixed(1)}h +`;
 }
 
 async function saveGlobalSettings() {
@@ -276,7 +289,7 @@ function setSyncStatus(ok, message) {
 async function loadServerData() {
     if (dragState.dragging) return; // 드래그 중에는 화면을 새로 그리지 않음 (다음 폴링 때 재시도)
     const weekKey = getWeekStorageKey();
-    document.getElementById('week-title').innerText = `${currentWeekDates[0].label.split('(')[0]} ~ ${currentWeekDates[6].label.split('(')[0]} 현황`;
+    document.getElementById('week-title').innerText = `${currentWeekDates[0].label.split('(')[0]} ~ ${currentWeekDates[6].label.split('(')[0]}`;
 
     if (!supabaseClient) {
         fallbackToLocal();
@@ -553,13 +566,13 @@ function renderApp() {
             <section class="friend-card ledger-row bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden relative">
                 <div class="ledger-row-head">
                     <div class="ledger-person">
-                        <span class="drag-handle text-slate-300 hover:text-slate-500 cursor-grab select-none text-base leading-none touch-none" title="꾹 눌러서 순서 변경">⠿</span>
+                        <button type="button" class="drag-handle text-slate-300 hover:text-slate-500 cursor-grab select-none text-base leading-none touch-none" title="잡아서 순서 변경" aria-label="순서 변경">순서</button>
                         <div>
                             <h3 class="text-lg font-bold text-slate-900">${friend.name}</h3>
                         </div>
                     </div>
                     <div class="ledger-actions">
-                        <button onclick="editSelectedDaysTarget(${friend.id})" class="card-action-link text-indigo-600 font-bold underline cursor-pointer bg-indigo-50 px-2 py-0.5 rounded-md hover:bg-indigo-100 transition">목표 변경</button>
+                        <button onclick="editSelectedDaysTarget(${friend.id})" class="card-action-link text-indigo-600 font-bold underline cursor-pointer bg-indigo-50 px-2 py-0.5 rounded-md hover:bg-indigo-100 transition">시작 시간 설정</button>
                         <button onclick="setDayOff(${friend.id})" class="dayoff-button ${dayOffDays.length > 0 ? 'is-active' : ''} text-xs font-bold px-3 py-1.5 rounded-xl border transition cursor-pointer ${dayOffDays.length > 0 ? 'bg-amber-100 border-amber-200 text-amber-800' : 'bg-white border-slate-200 text-slate-600'}">
                             Day Off
                         </button>
@@ -573,17 +586,31 @@ function renderApp() {
                         </div>
 
                         <div class="target-row grid grid-cols-8 text-center text-[9px] font-bold text-indigo-600 bg-indigo-50/70 py-0.5 rounded-md">
-                            <div class="row-label">목표시간</div>
-                            ${dayTargets.map(t => `<div>${t}</div>`).join('')}
+                            <div class="row-label" aria-hidden="true"></div>
+                            <div class="target-values">${dayTargets.map(t => `<span>${t}</span>`).join('')}</div>
                         </div>
 
                         <div class="grid grid-cols-8 items-center text-center">
-                            <div class="row-label text-[11px] font-bold text-slate-500">공부시간</div>
+                            <div class="row-label text-[11px] font-bold text-slate-500">시작 시간</div>
+                            ${friend.start_done_list.map((v, idx) => {
+                                const isOff = isDayOff(friend, idx);
+                                const isFuture = isFutureDayIndex(idx);
+                                return `
+                                <div class="flex justify-center">
+                                    <button onclick="toggleCheck(${friend.id}, ${idx}, 'start_done_list', ${v})" ${isFuture ? 'disabled' : ''} class="mark-button ${isOff ? 'is-off' : isFuture ? 'is-locked' : v === true ? 'is-on' : v === false ? 'is-fail' : 'is-empty'} w-6 h-6 rounded-md flex items-center justify-center border text-xs cursor-pointer ${isOff ? 'bg-amber-100 border-amber-100 text-amber-600' : v === true ? 'bg-emerald-50 border-emerald-200 text-emerald-600 font-bold' : 'bg-white border-slate-200'}">
+                                        ${isOff ? 'OFF' : isFuture ? '' : v === true ? '○' : v === false ? 'X' : ''}
+                                    </button>
+                                </div>
+                            `;}).join('')}
+                        </div>
+                        <div class="grid grid-cols-8 items-center text-center">
+                            <div class="row-label text-[11px] font-bold text-slate-500">${formatMinimumShortLabel()}</div>
                             ${friend.study_done_list.map((v, idx) => {
                                 const isOff = isDayOff(friend, idx);
+                                const isFuture = isFutureDayIndex(idx);
                                 return `<div class="flex justify-center">
-                                    <button onclick="toggleStudyDone(${friend.id}, ${idx}, ${v})" class="mark-button ${isOff ? 'is-off' : v === true ? 'is-on' : v === false ? 'is-fail' : 'is-empty'} w-6 h-6 rounded-md flex items-center justify-center border text-sm cursor-pointer transition ${isOff ? 'bg-amber-100 border-amber-100 text-amber-600' : v === true ? 'bg-indigo-50 border-indigo-300 text-indigo-500' : 'bg-white border-slate-200 text-slate-300'}">
-                                        ${isOff ? 'OFF' : (v === true ? '○' : v === false ? 'X' : '')}
+                                    <button onclick="toggleStudyDone(${friend.id}, ${idx}, ${v})" ${isFuture ? 'disabled' : ''} class="mark-button ${isOff ? 'is-off' : isFuture ? 'is-locked' : v === true ? 'is-on' : v === false ? 'is-fail' : 'is-empty'} w-6 h-6 rounded-md flex items-center justify-center border text-sm cursor-pointer transition ${isOff ? 'bg-amber-100 border-amber-100 text-amber-600' : v === true ? 'bg-indigo-50 border-indigo-300 text-indigo-500' : 'bg-white border-slate-200 text-slate-300'}">
+                                        ${isOff ? 'OFF' : isFuture ? '' : (v === true ? '○' : v === false ? 'X' : '')}
                                     </button>
                                 </div>`;
                             }).join('')}
@@ -592,25 +619,16 @@ function renderApp() {
                             <div class="row-label text-[11px] font-bold text-slate-500">${formatBonusShortLabel()}</div>
                             ${friend.bonus_done_list.map((v, idx) => {
                                 const isOff = isDayOff(friend, idx);
+                                const isFuture = isFutureDayIndex(idx);
                                 return `<div class="flex justify-center">
-                                    <button onclick="toggleBonus(${friend.id}, ${idx}, ${v})" class="mark-button ${isOff ? 'is-off' : v === true ? 'is-on' : v === false ? 'is-fail' : 'is-empty'} w-6 h-6 rounded-md flex items-center justify-center border text-sm cursor-pointer transition ${isOff ? 'bg-amber-100 border-amber-100 text-amber-600' : v === true ? 'bg-lime-50 border-lime-300 text-lime-500' : 'bg-white border-slate-200 text-slate-300'}">
-                                        ${isOff ? 'OFF' : (v === true ? '○' : v === false ? 'X' : '')}
+                                    <button onclick="toggleBonus(${friend.id}, ${idx}, ${v})" ${isFuture ? 'disabled' : ''} class="mark-button ${isOff ? 'is-off' : isFuture ? 'is-locked' : v === true ? 'is-on' : v === false ? 'is-fail' : 'is-empty'} w-6 h-6 rounded-md flex items-center justify-center border text-sm cursor-pointer transition ${isOff ? 'bg-amber-100 border-amber-100 text-amber-600' : v === true ? 'bg-lime-50 border-lime-300 text-lime-500' : 'bg-white border-slate-200 text-slate-300'}">
+                                        ${isOff ? 'OFF' : isFuture ? '' : (v === true ? '○' : v === false ? 'X' : '')}
                                     </button>
                                 </div>`;
                             }).join('')}
                         </div>
-                        <div class="grid grid-cols-8 items-center text-center">
-                            <div class="row-label text-[11px] font-bold text-slate-500">시작시간</div>
-                            ${friend.start_done_list.map((v, idx) => `
-                                <div class="flex justify-center">
-                                    <button onclick="toggleCheck(${friend.id}, ${idx}, 'start_done_list', ${v})" class="mark-button ${isDayOff(friend, idx) ? 'is-off' : v === true ? 'is-on' : v === false ? 'is-fail' : 'is-empty'} w-6 h-6 rounded-md flex items-center justify-center border text-xs cursor-pointer ${isDayOff(friend, idx) ? 'bg-amber-100 border-amber-100 text-amber-600' : v === true ? 'bg-emerald-50 border-emerald-200 text-emerald-600 font-bold' : 'bg-white border-slate-200'}">
-                                        ${isDayOff(friend, idx) ? 'OFF' : v === true ? 'O' : v === false ? 'X' : ''}
-                                    </button>
-                                </div>
-                            `).join('')}
-                        </div>
                         <div class="score-row grid grid-cols-8 items-center text-center pt-1 border-t border-dashed border-slate-100">
-                            <div class="row-label text-[11px] font-bold text-slate-500">일일점수</div>
+                            <div class="row-label text-[11px] font-bold text-slate-500">일일 점수</div>
                             ${(() => {
                                 const dates = currentWeekDates.map((_, idx) => {
                                     const [y,m,d] = currentWeekDates[idx].storageKey.split('-').map(Number);
@@ -654,7 +672,7 @@ async function addNewFriend() {
     const name = prompt("새로운 친구 이름을 입력하세요:");
     if(!name || name.trim() === "") return;
 
-    const picked = await openTimePicker("08:40", "목표 시작 시간 설정");
+    const picked = await openTimePicker("08:40", "시작 시간 설정");
     const time = picked || "08:40";
     const defaultNotes = Array(7).fill(time).join("|");
     const startWeekKey = getWeekStorageKey();
@@ -711,6 +729,7 @@ async function toggleStudyDone(id, idx, currentVal) {
     const friend = serverData.find(f => f.id === id);
     if (!friend) return;
     if (isDayOff(friend, idx)) return;
+    if (isFutureDayIndex(idx)) return;
     let newList = normalizeWeekValues(friend.study_done_list);
     newList[idx] = nextCheckValue(currentVal);
 
@@ -728,6 +747,7 @@ async function toggleBonus(id, idx, currentVal) {
     const friend = serverData.find(f => f.id === id);
     if (!friend) return;
     if (isDayOff(friend, idx)) return;
+    if (isFutureDayIndex(idx)) return;
     let newList = normalizeWeekValues(friend.bonus_done_list);
     newList[idx] = nextCheckValue(currentVal);
 
@@ -745,6 +765,7 @@ async function toggleCheck(id, index, listName, currentVal) {
     const friend = serverData.find(f => f.id === id);
     if(friend) {
         if(isDayOff(friend, index)) return;
+        if(isFutureDayIndex(index)) return;
         let newList = normalizeWeekValues(friend[listName]);
         newList[index] = nextCheckValue(currentVal);
 
@@ -818,7 +839,7 @@ async function bootApp() {
     updateFineUnitLabel();
     currentWeekDates = getWeekDates(weekOffset);
     document.getElementById('week-title').innerText =
-        `${currentWeekDates[0].label.split('(')[0]} ~ ${currentWeekDates[6].label.split('(')[0]} 현황`;
+        `${currentWeekDates[0].label.split('(')[0]} ~ ${currentWeekDates[6].label.split('(')[0]}`;
 
     // 2) Supabase 라이브러리 확보 시도 (jsdelivr → unpkg 순서, 최대 8초)
     const ready = await ensureSupabaseLib();

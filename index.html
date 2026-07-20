@@ -25,14 +25,14 @@
 
             <div class="study-metrics">
                 <div class="study-chip">
-                    9월 모평: <span id="mopyung-dday" class="text-amber-600 font-extrabold text-sm">D-Day</span>
+                    9모: <span id="mopyung-dday" class="text-amber-600 font-extrabold text-sm">D-Day</span>
                 </div>
                 <div class="study-chip">
-                    🔥 수능: <span id="suneung-dday" class="text-rose-600 font-extrabold text-sm">D-Day</span>
+                    수능: <span id="suneung-dday" class="text-rose-600 font-extrabold text-sm">D-Day</span>
                 </div>
             </div>
 
-            <button onclick="addNewFriend()" class="study-primary-button cursor-pointer">
+            <button onclick="addNewFriend()" class="study-primary-button cursor-pointer hidden">
                 <i class="fa-solid fa-user-plus mr-1"></i> 친구 등록하기
             </button>
         </div>
@@ -61,7 +61,7 @@
     <!-- 시간 선택 모달 (스크롤 피커) -->
     <div id="time-picker-modal" class="study-modal fixed inset-0 bg-black/40 backdrop-blur-sm z-[100] hidden items-center justify-center px-4">
         <div class="study-modal-panel bg-white rounded-2xl shadow-xl w-full max-w-xs p-5">
-            <h3 id="time-picker-title" class="text-sm font-bold text-slate-800 mb-4 text-center">목표 시간 선택</h3>
+            <h3 id="time-picker-title" class="text-sm font-bold text-slate-800 mb-4 text-center">시작 시간 선택</h3>
             <div class="flex justify-center items-center gap-2 mb-5">
                 <select id="tp-hour" class="text-2xl font-bold text-center bg-slate-50 border border-slate-200 rounded-xl py-3 px-2 w-24 focus:outline-none focus:ring-2 focus:ring-indigo-300"></select>
                 <span class="text-2xl font-bold text-slate-400">:</span>
@@ -86,10 +86,10 @@
         </div>
     </div>
 
-    <!-- 요일별 목표 시간 수정 모달 -->
+    <!-- 요일별 시작 시간 수정 모달 -->
     <div id="target-week-modal" class="study-modal hidden">
         <div class="study-modal-panel">
-            <h3 class="target-week-title">요일별 목표 시간</h3>
+            <h3 class="target-week-title">요일별 시작 시간</h3>
             <div id="target-week-fields" class="target-week-fields"></div>
             <div class="modal-actions">
                 <button onclick="closeTargetWeekPicker(false)" class="study-modal-button">취소</button>
@@ -99,16 +99,16 @@
     </div>
 
     <!-- 상점 기준 시간 선택 모달 -->
-    <div id="bonus-picker-modal" class="study-modal fixed inset-0 bg-black/40 backdrop-blur-sm z-[100] hidden items-center justify-center px-4">
-        <div class="study-modal-panel bg-white rounded-2xl shadow-xl w-full max-w-xs p-5">
-            <h3 id="bonus-picker-title" class="text-sm font-bold text-slate-800 mb-4 text-center">상점 기준 시간</h3>
-            <div class="flex justify-center items-center gap-2 mb-5">
-                <input id="bonus-hour-input" type="number" min="3" max="15" step="0.5" inputmode="decimal" class="text-2xl font-bold text-center bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 w-32 focus:outline-none focus:ring-2 focus:ring-lime-300" />
-                <span class="text-base font-bold text-slate-400">시간 이상</span>
+    <div id="bonus-picker-modal" class="study-modal hidden">
+        <div class="study-modal-panel">
+            <h3 id="bonus-picker-title" class="target-week-title">상점 기준 시간</h3>
+            <div class="setting-picker-row">
+                <input id="bonus-hour-input" type="text" inputmode="decimal" autocomplete="off" class="setting-number-input" />
+                <span>시간 이상</span>
             </div>
-            <div class="flex gap-2">
-                <button onclick="closeBonusPicker(false)" class="study-modal-button flex-1 py-2.5 rounded-xl bg-slate-100 text-slate-600 font-bold text-sm cursor-pointer">취소</button>
-                <button onclick="closeBonusPicker(true)" class="study-modal-button is-primary flex-1 py-2.5 rounded-xl bg-lime-600 text-white font-bold text-sm cursor-pointer">확인</button>
+            <div class="modal-actions">
+                <button onclick="closeBonusPicker(false)" class="study-modal-button">취소</button>
+                <button onclick="closeBonusPicker(true)" class="study-modal-button is-primary">확인</button>
             </div>
         </div>
     </div>
@@ -117,9 +117,9 @@
     <div id="fine-unit-picker-modal" class="study-modal hidden">
         <div class="study-modal-panel">
             <h3 class="target-week-title">벌금 단위</h3>
-            <div class="flex justify-center items-center gap-2 mb-5">
-                <input id="fine-unit-input" type="number" min="100" max="100000" step="100" inputmode="numeric" class="text-2xl font-bold text-center bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 w-36 focus:outline-none focus:ring-2 focus:ring-rose-300" />
-                <span class="text-base font-bold text-slate-400">원 / 점</span>
+            <div class="setting-picker-row">
+                <input id="fine-unit-input" type="text" inputmode="numeric" autocomplete="off" class="setting-number-input is-wide" />
+                <span>원 / 점</span>
             </div>
             <div class="modal-actions">
                 <button onclick="closeFineUnitPicker(false)" class="study-modal-button">취소</button>
