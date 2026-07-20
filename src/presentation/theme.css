@@ -936,6 +936,10 @@ body.study-shell ::selection {
         user-select: none;
     }
 
+    .drag-handle {
+        display: none;
+    }
+
     .ledger-row-head,
     .ledger-row-body,
     .ledger-row-foot {

@@ -397,6 +397,7 @@ const dragState = {
     longPressTimer: null,
     pressX: 0,
     pressY: 0,
+    pressScrollY: 0,
     suppressClick: false
 };
 
@@ -444,16 +445,31 @@ function attachDragHandlers(handleEl, cardEl) {
 }
 
 function attachCardLongPress(cardEl) {
-    cardEl.addEventListener('pointerdown', (e) => {
+    const scheduleLongPress = (sourceEl, pointerId, clientX, clientY) => {
         if (!window.matchMedia('(max-width: 640px)').matches) return;
         if (dragState.dragging) return;
         clearLongPress();
-        dragState.pressX = e.clientX;
-        dragState.pressY = e.clientY;
+        dragState.pressX = clientX;
+        dragState.pressY = clientY;
+        dragState.pressScrollY = window.scrollY;
         dragState.longPressTimer = setTimeout(() => {
+            const scrolled = Math.abs(window.scrollY - dragState.pressScrollY);
+            if (scrolled > 2) {
+                clearLongPress();
+                return;
+            }
             dragState.suppressClick = true;
-            startCardDrag(cardEl, cardEl, e.pointerId, e.clientY);
+            startCardDrag(cardEl, sourceEl, pointerId, clientY);
         }, LONG_PRESS_REORDER_MS);
+    };
+
+    cardEl.addEventListener('pointerdown', (e) => {
+        scheduleLongPress(cardEl, e.pointerId, e.clientX, e.clientY);
+    });
+    cardEl.addEventListener('touchstart', (e) => {
+        const touch = e.touches && e.touches[0];
+        if (!touch) return;
+        scheduleLongPress(cardEl, null, touch.clientX, touch.clientY);
     });
     cardEl.addEventListener('pointermove', (e) => {
         if (!dragState.longPressTimer) return;
@@ -462,6 +478,14 @@ function attachCardLongPress(cardEl) {
     });
     cardEl.addEventListener('pointerup', clearLongPress);
     cardEl.addEventListener('pointercancel', clearLongPress);
+    cardEl.addEventListener('touchend', () => {
+        if (dragState.dragging) endDragGlobal();
+        clearLongPress();
+    });
+    cardEl.addEventListener('touchcancel', () => {
+        if (dragState.dragging) endDragGlobal();
+        clearLongPress();
+    });
 }
 
 function animateCardReorder(container, move) {
@@ -482,26 +506,24 @@ function animateCardReorder(container, move) {
     });
 }
 
-// 전역 리스너는 딱 한 번만 등록
-window.addEventListener('pointermove', (e) => {
+function moveDraggedCard(clientY) {
     if (!dragState.dragging || !dragState.cardEl) return;
-    e.preventDefault();
     const container = document.getElementById('friends-container');
     const cardEl = dragState.cardEl;
-    const direction = e.clientY - dragState.lastY;
+    const direction = clientY - dragState.lastY;
     if (Math.abs(direction) < 2) return;
     const siblings = [...container.querySelectorAll('.friend-card')].filter(el => el !== cardEl);
     let reordered = false;
     for (const el of siblings) {
         const rect = el.getBoundingClientRect();
-        if (e.clientY > rect.top && e.clientY < rect.bottom) {
+        if (clientY > rect.top && clientY < rect.bottom) {
             const els = [...container.children];
             const cardIndex = els.indexOf(cardEl);
             const targetIndex = els.indexOf(el);
             const downThreshold = rect.top + rect.height / 3;
             const upThreshold = rect.bottom - rect.height / 3;
-            const movingDown = direction > 0 && targetIndex > cardIndex && e.clientY > downThreshold;
-            const movingUp = direction < 0 && targetIndex < cardIndex && e.clientY < upThreshold;
+            const movingDown = direction > 0 && targetIndex > cardIndex && clientY > downThreshold;
+            const movingUp = direction < 0 && targetIndex < cardIndex && clientY < upThreshold;
             if (!movingDown && !movingUp) break;
             animateCardReorder(container, () => {
                 if (movingUp) {
@@ -515,10 +537,36 @@ window.addEventListener('pointermove', (e) => {
         }
     }
     if (reordered || Math.abs(direction) > 8) {
-        dragState.lastY = e.clientY;
+        dragState.lastY = clientY;
     }
+}
+
+// 전역 리스너는 딱 한 번만 등록
+window.addEventListener('pointermove', (e) => {
+    if (dragState.longPressTimer && !dragState.dragging) {
+        const moved = Math.hypot(e.clientX - dragState.pressX, e.clientY - dragState.pressY);
+        if (moved > 6) clearLongPress();
+    }
+    if (!dragState.dragging || !dragState.cardEl) return;
+    e.preventDefault();
+    moveDraggedCard(e.clientY);
 });
 window.addEventListener('pointerup', () => { if (dragState.dragging) endDragGlobal(); });
+window.addEventListener('scroll', clearLongPress, { passive: true });
+window.addEventListener('touchend', () => { if (dragState.dragging) endDragGlobal(); });
+window.addEventListener('touchcancel', () => { if (dragState.dragging) endDragGlobal(); });
+window.addEventListener('touchmove', (e) => {
+    const touch = e.touches && e.touches[0];
+    if (!touch) return;
+    if (dragState.dragging && dragState.cardEl) {
+        e.preventDefault();
+        moveDraggedCard(touch.clientY);
+        return;
+    }
+    if (!dragState.longPressTimer) return;
+    const moved = Math.hypot(touch.clientX - dragState.pressX, touch.clientY - dragState.pressY);
+    if (moved > 8) clearLongPress();
+}, { passive: false });
 window.addEventListener('click', (e) => {
     if (!dragState.suppressClick) return;
     e.preventDefault();
