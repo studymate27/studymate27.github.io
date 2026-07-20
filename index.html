@@ -18,7 +18,7 @@
                     <i class="fa-solid fa-graduation-cap text-xl"></i>
                 </div>
                 <div>
-                    <h1 class="study-title">Study Mate Sync</h1>
+                    <h1 class="study-title">Study Mate</h1>
                     <p class="study-subtitle"></p>
                 </div>
             </div>
@@ -31,7 +31,7 @@
                     🔥 수능: <span id="suneung-dday" class="text-rose-600 font-extrabold text-sm">D-Day</span>
                 </div>
                 <button onclick="editBonusHours()" class="study-chip-button cursor-pointer">
-                    🎁 보너스 기준: <span id="bonus-hours-label">-</span> <i class="fa-solid fa-pen text-[9px] ml-0.5"></i>
+                    🎁 상점 기준: <span id="bonus-hours-label">-</span> <i class="fa-solid fa-pen text-[9px] ml-0.5"></i>
                 </button>
             </div>
 
@@ -41,7 +41,7 @@
         </div>
         <div class="study-rulebar">
             <p class="text-[11px] text-slate-400 font-medium text-center md:text-left">
-                하루 기준 · 공부시간 ○ (미달성) <span class="text-rose-500 font-bold">-1점</span> · 목표시간 미준수 <span class="text-rose-500 font-bold">-1점</span> · 🎁 보너스 별 탭 <span class="text-emerald-600 font-bold">+1점</span> (Day off인 날은 계산 제외) · 점수는 계속 이어지다가 잔고가 마이너스인 주에만 500원×점수로 정산돼요 · <span class="text-indigo-500 font-bold">⠿</span>을 꾹 눌러서 순서 변경 가능 (이 기기에만 적용, 다른 기기와 공유 안 됨)
+                하루 기준 · 공부시간 ○ (미달성) <span class="text-rose-500 font-bold">-1점</span> · 목표시간 미준수 <span class="text-rose-500 font-bold">-1점</span> · 🎁 상점 별 탭 <span class="text-emerald-600 font-bold">+1점</span> (Day off인 날은 계산 제외)
             </p>
         </div>
     </header>
@@ -49,13 +49,9 @@
     <main class="study-main">
         <div class="study-toolbar flex justify-between items-center mb-8">
             <div class="study-week-control flex items-center gap-2">
-                <button onclick="changeWeek(-1)" class="study-week-button cursor-pointer">
-                    <i class="fa-solid fa-chevron-left"></i>
-                </button>
+                <button onclick="changeWeek(-1)" class="study-week-button cursor-pointer" aria-label="이전 주">‹</button>
                 <h2 id="week-title" class="text-sm md:text-base font-bold text-slate-800 px-2 min-w-[180px] text-center">주차 계산 중...</h2>
-                <button onclick="changeWeek(1)" class="study-week-button cursor-pointer">
-                    <i class="fa-solid fa-chevron-right"></i>
-                </button>
+                <button onclick="changeWeek(1)" class="study-week-button cursor-pointer" aria-label="다음 주">›</button>
             </div>
             <span id="sync-status" class="hidden"></span>
         </div>
@@ -83,9 +79,7 @@
     <div id="dayoff-picker-modal" class="study-modal fixed inset-0 bg-black/40 backdrop-blur-sm z-[100] hidden items-center justify-center px-4">
         <div class="study-modal-panel bg-white rounded-2xl shadow-xl w-full max-w-xs p-5">
             <h3 class="text-sm font-bold text-slate-800 mb-4 text-center">Day Off 요일 선택</h3>
-            <div class="flex justify-center mb-5">
-                <select id="do-select" class="text-lg font-bold text-center bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 w-full focus:outline-none focus:ring-2 focus:ring-amber-300"></select>
-            </div>
+            <div id="dayoff-week-fields" class="dayoff-week-fields"></div>
             <div class="flex gap-2">
                 <button onclick="closeDayOffPicker(false)" class="study-modal-button flex-1 py-2.5 rounded-xl bg-slate-100 text-slate-600 font-bold text-sm cursor-pointer">취소</button>
                 <button onclick="closeDayOffPicker(true)" class="study-modal-button is-primary flex-1 py-2.5 rounded-xl bg-amber-500 text-white font-bold text-sm cursor-pointer">확인</button>
@@ -93,12 +87,24 @@
         </div>
     </div>
 
-    <!-- 보너스 기준 시간 선택 모달 (스크롤 피커) -->
+    <!-- 요일별 목표 시간 수정 모달 -->
+    <div id="target-week-modal" class="study-modal hidden">
+        <div class="study-modal-panel">
+            <h3 class="target-week-title">요일별 목표 시간</h3>
+            <div id="target-week-fields" class="target-week-fields"></div>
+            <div class="modal-actions">
+                <button onclick="closeTargetWeekPicker(false)" class="study-modal-button">취소</button>
+                <button onclick="closeTargetWeekPicker(true)" class="study-modal-button is-primary">확인</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 상점 기준 시간 선택 모달 -->
     <div id="bonus-picker-modal" class="study-modal fixed inset-0 bg-black/40 backdrop-blur-sm z-[100] hidden items-center justify-center px-4">
         <div class="study-modal-panel bg-white rounded-2xl shadow-xl w-full max-w-xs p-5">
-            <h3 class="text-sm font-bold text-slate-800 mb-4 text-center">🎁 보너스 기준 시간</h3>
+            <h3 class="text-sm font-bold text-slate-800 mb-4 text-center">🎁 상점 기준 시간</h3>
             <div class="flex justify-center items-center gap-2 mb-5">
-                <select id="bonus-hour-select" class="text-2xl font-bold text-center bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 w-32 focus:outline-none focus:ring-2 focus:ring-lime-300"></select>
+                <input id="bonus-hour-input" type="number" min="3" max="15" step="0.5" inputmode="decimal" class="text-2xl font-bold text-center bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 w-32 focus:outline-none focus:ring-2 focus:ring-lime-300" />
                 <span class="text-base font-bold text-slate-400">시간 이상</span>
             </div>
             <div class="flex gap-2">

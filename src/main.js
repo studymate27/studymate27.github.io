@@ -1,15 +1,17 @@
 import { MASTER_WEEK_KEY, SETTINGS_NAME, SETTINGS_WEEK_KEY } from "./application/settings.js";
 import { formatDday, getDday, getWeekDates, parseDateKey, parseWeekKeyDate } from "./domain/dates.js";
-import { computeScoreChain, dayDeltaDisplay } from "./domain/scoring.js";
+import { computeScoreChain, dayDeltaDisplay, dayOffIndices } from "./domain/scoring.js";
 import { parseDayTargets } from "./domain/targets.js";
 import { readFriendOrder, readLocalBackup, writeFriendOrder, writeLocalBackup } from "./infrastructure/local-storage.js";
 import { createSupabaseClient, ensureSupabaseLib } from "./infrastructure/supabase-client.js";
 import {
     closeBonusPicker,
     closeDayOffPicker,
+    closeTargetWeekPicker,
     closeTimePicker,
     openBonusPicker,
     openDayOffPicker,
+    openTargetWeekPicker,
     openTimePicker
 } from "./presentation/pickers.js";
 
@@ -18,7 +20,6 @@ let supabaseClient = null;
 let weekOffset = 0;
 let currentWeekDates = [];
 let serverData = [];
-let selectedDaysMap = {};
 let syncedWeeks = new Set(); // 이미 마스터 동기화를 완료한 주차 (중복 라운드트립 방지)
 
 // ===== 상점/벌점 시스템 =====
@@ -26,6 +27,24 @@ let syncedWeeks = new Set(); // 이미 마스터 동기화를 완료한 주차 (
 let bonusHours = 7;                  // 보너스 기준(표시용) - 실제 보너스 지급은 별 토글로 직접 판단
 let masterByName = {};               // name -> master_list row
 let rowsByNameWeek = {};             // name -> { weekKey: row }
+
+const emptyWeekValues = () => [null, null, null, null, null, null, null];
+
+function normalizeWeekValues(list) {
+    if (!Array.isArray(list) || list.length !== 7) return emptyWeekValues();
+    if (list.every(value => value === false)) return emptyWeekValues();
+    return [...list];
+}
+
+function nextCheckValue(value) {
+    if (value === null || value === undefined) return true;
+    if (value === true) return false;
+    return null;
+}
+
+function isDayOff(friend, dayIndex) {
+    return dayOffIndices(friend).includes(dayIndex);
+}
 
 function updateBonusLabel() {
     const el = document.getElementById('bonus-hours-label');
@@ -100,10 +119,10 @@ async function syncWithMasterList(weekKey, currentData, masters) {
             target_start_time: fallbackTime,
             week_key: weekKey,
             start_week_key: master.start_week_key,
-            time_done_list: [false, false, false, false, false, false, false],
-            start_done_list: [false, false, false, false, false, false, false],
-            study_done_list: [false, false, false, false, false, false, false],
-            bonus_done_list: [false, false, false, false, false, false, false],
+            time_done_list: emptyWeekValues(),
+            start_done_list: emptyWeekValues(),
+            study_done_list: emptyWeekValues(),
+            bonus_done_list: emptyWeekValues(),
             notes: fallbackNotes,
             day_off_used: false,
             day_off_day: 0
@@ -206,19 +225,6 @@ function saveLocalBackup() {
     writeLocalBackup(getWeekStorageKey(), serverData);
 }
 
-function toggleDaySelection(friendId, dayIdx) {
-    if (!selectedDaysMap[friendId]) {
-        selectedDaysMap[friendId] = [];
-    }
-    const pos = selectedDaysMap[friendId].indexOf(dayIdx);
-    if (pos > -1) {
-        selectedDaysMap[friendId].splice(pos, 1);
-    } else {
-        selectedDaysMap[friendId].push(dayIdx);
-    }
-    renderApp();
-}
-
 // ===== 기기별(로컬) 카드 순서 =====
 // 서버와 동기화하지 않고 이 브라우저(기기)에만 저장 -> 다른 기기/폴링과 무관하게 내 화면 순서가 고정됨
 function getLocalOrder() {
@@ -297,24 +303,16 @@ window.addEventListener('pointermove', (e) => {
 window.addEventListener('pointerup', () => { if (dragState.dragging) endDragGlobal(); });
 
 async function editSelectedDaysTarget(friendId) {
-    const targetDays = selectedDaysMap[friendId] || [];
-    if (targetDays.length === 0) {
-        alert("목표 시간을 바꿀 요일을 아래 월~일 버튼에서 먼저 선택(터치)해 주세요!");
-        return;
-    }
-
     const friend = serverData.find(f => f.id === friendId);
     if (!friend) return;
 
     const currentArr = parseDayTargets(friend);
-    const newTime = await openTimePicker(currentArr[targetDays[0]], "선택 요일 목표 시간");
-    if (!newTime) return; // 취소함
+    const nextTargets = await openTargetWeekPicker(currentArr);
+    if (!nextTargets) return; // 취소함
 
     if (!supabaseClient) {
-        targetDays.forEach(idx => { currentArr[idx] = newTime; });
-        friend.notes = currentArr.join("|");
+        friend.notes = nextTargets.join("|");
         saveLocalBackup();
-        selectedDaysMap[friendId] = [];
         loadServerData();
         return;
     }
@@ -337,9 +335,7 @@ async function editSelectedDaysTarget(friendId) {
 
     let failCount = 0;
     for (const row of targets) {
-        const arr = parseDayTargets(row);
-        targetDays.forEach(idx => { arr[idx] = newTime; });
-        const notesStr = arr.join("|");
+        const notesStr = nextTargets.join("|");
         const { error: upErr } = await supabaseClient.from('study_mate').update({ notes: notesStr }).eq('id', row.id);
         if (upErr) { failCount++; console.warn(`업데이트 실패 (${row.week_key}):`, upErr.message); }
     }
@@ -349,7 +345,6 @@ async function editSelectedDaysTarget(friendId) {
         console.log(`✅ ${targets.length}개 주차(마스터 리스트 포함)에 반영 완료`);
     }
 
-    selectedDaysMap[friendId] = [];
     loadServerData();
 }
 
@@ -368,15 +363,13 @@ function renderApp() {
 
     const orderedData = applyLocalOrder(serverData);
     const viewRows = orderedData.map(friend => {
-        if(!friend.start_done_list) friend.start_done_list = [false, false, false, false, false, false, false];
-        if(!friend.study_done_list || friend.study_done_list.length !== 7) friend.study_done_list = [false,false,false,false,false,false,false];
-        if(!friend.bonus_done_list || friend.bonus_done_list.length !== 7) friend.bonus_done_list = [false,false,false,false,false,false,false];
+        friend.start_done_list = normalizeWeekValues(friend.start_done_list);
+        friend.study_done_list = normalizeWeekValues(friend.study_done_list);
+        friend.bonus_done_list = normalizeWeekValues(friend.bonus_done_list);
         if(!friend.target_start_time || friend.target_start_time === "null") friend.target_start_time = "08:40";
 
         const dayTargets = parseDayTargets(friend);
-        const selectedDays = selectedDaysMap[friend.id] || [];
-        const daysKorean = ["월요일", "화요일", "수요일", "목요일", "금요일", "토요일", "일요일"];
-        const dayOffText = friend.day_off_used && friend.day_off_day !== undefined ? daysKorean[friend.day_off_day] : "미사용";
+        const dayOffDays = dayOffIndices(friend);
 
         const master = masterByName[friend.name];
         const startWeekKey = (master && master.start_week_key) ? master.start_week_key : friend.week_key;
@@ -384,39 +377,13 @@ function renderApp() {
         weeksMap[weekKey] = friend; // 이번 주는 화면에 그려지는 최신 friend 객체를 그대로 사용
         const score = computeScoreChain(friend.name, weekKey, weeksMap, startWeekKey);
         const fineAmount = score.final < 0 ? Math.abs(score.final) * 500 : 0;
-        const checkedCount = friend.study_done_list.filter(Boolean).length + friend.start_done_list.filter(Boolean).length + friend.bonus_done_list.filter(Boolean).length;
-        const dayOffCount = friend.day_off_used ? 1 : 0;
 
-        return { friend, dayTargets, selectedDays, dayOffText, score, fineAmount, checkedCount, dayOffCount };
+        return { friend, dayTargets, dayOffDays, score, fineAmount };
     });
 
-    const totalFine = viewRows.reduce((sum, row) => sum + row.fineAmount, 0);
-    const negativeCount = viewRows.filter(row => row.score.final < 0).length;
-    const weeklyChange = viewRows.reduce((sum, row) => sum + row.score.rawChange, 0);
-    const activeMembers = viewRows.length;
+    container.innerHTML = "";
 
-    container.innerHTML = `
-        <section class="ledger-summary">
-            <div>
-                <span class="ledger-label">TOTAL FINE</span>
-                <strong>${totalFine.toLocaleString()}원</strong>
-            </div>
-            <div>
-                <span class="ledger-label">NEGATIVE</span>
-                <strong>${negativeCount}/${activeMembers}</strong>
-            </div>
-            <div>
-                <span class="ledger-label">WEEK DELTA</span>
-                <strong>${weeklyChange >= 0 ? '+' : ''}${weeklyChange}</strong>
-            </div>
-            <div>
-                <span class="ledger-label">MEMBERS</span>
-                <strong>${activeMembers}</strong>
-            </div>
-        </section>
-    `;
-
-    viewRows.forEach(({ friend, dayTargets, selectedDays, dayOffText, score, fineAmount, checkedCount }) => {
+    viewRows.forEach(({ friend, dayTargets, dayOffDays, score, fineAmount }) => {
 
         let cardHtml = `
             <section class="friend-card ledger-row bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden relative">
@@ -425,26 +392,17 @@ function renderApp() {
                         <span class="drag-handle text-slate-300 hover:text-slate-500 cursor-grab select-none text-base leading-none touch-none" title="꾹 눌러서 순서 변경">⠿</span>
                         <div>
                             <h3 class="text-lg font-bold text-slate-900">${friend.name}</h3>
-                            <p class="card-hint">${checkedCount}/21 checks · ${dayOffText}</p>
                         </div>
-                        <button onclick="deleteFriend(${friend.id}, '${friend.name}')" class="delete-button text-xs text-slate-300 hover:text-rose-500 font-bold transition cursor-pointer p-0.5"><i class="fa-solid fa-circle-xmark"></i></button>
                     </div>
                     <div class="ledger-actions">
                         <button onclick="editSelectedDaysTarget(${friend.id})" class="card-action-link text-indigo-600 font-bold underline cursor-pointer bg-indigo-50 px-2 py-0.5 rounded-md hover:bg-indigo-100 transition">목표 변경</button>
-                        <button onclick="setDayOff(${friend.id})" class="dayoff-button ${friend.day_off_used ? 'is-active' : ''} text-xs font-bold px-3 py-1.5 rounded-xl border transition cursor-pointer ${friend.day_off_used ? 'bg-amber-100 border-amber-200 text-amber-800' : 'bg-white border-slate-200 text-slate-600'}">
+                        <button onclick="setDayOff(${friend.id})" class="dayoff-button ${dayOffDays.length > 0 ? 'is-active' : ''} text-xs font-bold px-3 py-1.5 rounded-xl border transition cursor-pointer ${dayOffDays.length > 0 ? 'bg-amber-100 border-amber-200 text-amber-800' : 'bg-white border-slate-200 text-slate-600'}">
                             Day Off
                         </button>
                     </div>
                 </div>
 
                 <div class="ledger-row-body">
-                    <div class="day-selector-group flex gap-1 bg-slate-50 p-1.5 rounded-xl border border-slate-100 justify-between">
-                        ${["월", "화", "수", "목", "금", "토", "일"].map((day, idx) => {
-                            const isSelected = selectedDays.includes(idx);
-                            return `<button onclick="toggleDaySelection(${friend.id}, ${idx})" class="day-selector ${isSelected ? 'is-selected' : ''} flex-1 text-xs py-1 rounded-lg font-bold transition cursor-pointer ${isSelected ? 'bg-indigo-600 text-white shadow-xs' : 'bg-white text-slate-600 border border-slate-200/60 hover:bg-slate-50'}">${day}</button>`;
-                        }).join('')}
-                    </div>
-
                     <div class="card-grid space-y-3">
                         <div class="card-grid-header grid grid-cols-8 text-center text-[10px] font-bold text-slate-400 pb-1 border-b border-slate-100">
                             <div>구분</div>${currentWeekDates.map(d => `<div>${d.label}</div>`).join('')}
@@ -458,21 +416,21 @@ function renderApp() {
                         <div class="grid grid-cols-8 items-center text-center">
                             <div class="row-label text-[11px] font-bold text-slate-500 text-left">공부시간</div>
                             ${friend.study_done_list.map((v, idx) => {
-                                const isOff = friend.day_off_used && friend.day_off_day === idx;
+                                const isOff = isDayOff(friend, idx);
                                 return `<div class="flex justify-center">
-                                    <button onclick="toggleStudyDone(${friend.id}, ${idx}, ${v})" class="mark-button ${isOff ? 'is-off' : v ? 'is-on' : ''} w-6 h-6 rounded-md flex items-center justify-center border text-sm cursor-pointer transition ${isOff ? 'bg-amber-100 border-amber-100 text-amber-600' : v ? 'bg-indigo-50 border-indigo-300 text-indigo-500' : 'bg-white border-slate-200 text-slate-300'}">
-                                        ${isOff ? '☁️' : (v ? '●' : '○')}
+                                    <button onclick="toggleStudyDone(${friend.id}, ${idx}, ${v})" class="mark-button ${isOff ? 'is-off' : v === true ? 'is-on' : v === false ? 'is-fail' : 'is-empty'} w-6 h-6 rounded-md flex items-center justify-center border text-sm cursor-pointer transition ${isOff ? 'bg-amber-100 border-amber-100 text-amber-600' : v === true ? 'bg-indigo-50 border-indigo-300 text-indigo-500' : 'bg-white border-slate-200 text-slate-300'}">
+                                        ${isOff ? 'OFF' : (v === true ? '●' : v === false ? '○' : '-')}
                                     </button>
                                 </div>`;
                             }).join('')}
                         </div>
                         <div class="grid grid-cols-8 items-center text-center">
-                            <div class="row-label text-[11px] font-bold text-slate-500 text-left">보너스</div>
+                            <div class="row-label text-[11px] font-bold text-slate-500 text-left">상점</div>
                             ${friend.bonus_done_list.map((v, idx) => {
-                                const isOff = friend.day_off_used && friend.day_off_day === idx;
+                                const isOff = isDayOff(friend, idx);
                                 return `<div class="flex justify-center">
-                                    <button onclick="toggleBonus(${friend.id}, ${idx}, ${v})" class="mark-button ${isOff ? 'is-off' : v ? 'is-on' : ''} w-6 h-6 rounded-md flex items-center justify-center border text-sm cursor-pointer transition ${isOff ? 'bg-amber-100 border-amber-100 text-amber-600' : v ? 'bg-lime-50 border-lime-300 text-lime-500' : 'bg-white border-slate-200 text-slate-300'}">
-                                        ${isOff ? '☁️' : (v ? '★' : '☆')}
+                                    <button onclick="toggleBonus(${friend.id}, ${idx}, ${v})" class="mark-button ${isOff ? 'is-off' : v === true ? 'is-on' : v === false ? 'is-fail' : 'is-empty'} w-6 h-6 rounded-md flex items-center justify-center border text-sm cursor-pointer transition ${isOff ? 'bg-amber-100 border-amber-100 text-amber-600' : v === true ? 'bg-lime-50 border-lime-300 text-lime-500' : 'bg-white border-slate-200 text-slate-300'}">
+                                        ${isOff ? 'OFF' : (v === true ? '★' : v === false ? '☆' : '-')}
                                     </button>
                                 </div>`;
                             }).join('')}
@@ -481,8 +439,8 @@ function renderApp() {
                             <div class="row-label text-[11px] font-bold text-slate-500 text-left">시작시간</div>
                             ${friend.start_done_list.map((v, idx) => `
                                 <div class="flex justify-center">
-                                    <button onclick="toggleCheck(${friend.id}, ${idx}, 'start_done_list', ${v})" class="mark-button ${friend.day_off_used && friend.day_off_day === idx ? 'is-off' : v ? 'is-on' : ''} w-6 h-6 rounded-md flex items-center justify-center border text-xs cursor-pointer ${friend.day_off_used && friend.day_off_day === idx ? 'bg-amber-100 border-amber-100 text-amber-600' : v ? 'bg-emerald-50 border-emerald-200 text-emerald-600 font-bold' : 'bg-white border-slate-200'}">
-                                        ${friend.day_off_used && friend.day_off_day === idx ? '☁️' : v ? 'O' : 'X'}
+                                    <button onclick="toggleCheck(${friend.id}, ${idx}, 'start_done_list', ${v})" class="mark-button ${isDayOff(friend, idx) ? 'is-off' : v === true ? 'is-on' : v === false ? 'is-fail' : 'is-empty'} w-6 h-6 rounded-md flex items-center justify-center border text-xs cursor-pointer ${isDayOff(friend, idx) ? 'bg-amber-100 border-amber-100 text-amber-600' : v === true ? 'bg-emerald-50 border-emerald-200 text-emerald-600 font-bold' : 'bg-white border-slate-200'}">
+                                        ${isDayOff(friend, idx) ? 'OFF' : v === true ? 'O' : v === false ? 'X' : '-'}
                                     </button>
                                 </div>
                             `).join('')}
@@ -495,10 +453,10 @@ function renderApp() {
                                     return new Date(y, m-1, d);
                                 });
                                 return friend.study_done_list.map((studyDone, idx) => {
-                                    const isOff = friend.day_off_used && friend.day_off_day === idx;
+                                    const isOff = isDayOff(friend, idx);
                                     const isFuture = dates[idx] > today;
-                                    const bonusDone = !!friend.bonus_done_list[idx];
-                                    const disp = dayDeltaDisplay(!!studyDone, !!friend.start_done_list[idx], bonusDone, isOff, isFuture);
+                                    const bonusDone = friend.bonus_done_list[idx];
+                                    const disp = dayDeltaDisplay(studyDone, friend.start_done_list[idx], bonusDone, isOff, isFuture);
                                     return `<div class="text-[11px] ${disp.cls}">${disp.text}</div>`;
                                 }).join('');
                             })()}
@@ -506,23 +464,8 @@ function renderApp() {
                     </div>
                 </div>
                 <div class="ledger-row-foot">
-                    <div class="score-summary bg-indigo-50/70 px-6 py-3 border-t border-indigo-100 grid grid-cols-3 gap-2 text-center">
-                    <div>
-                        <div class="score-label text-[10px] text-indigo-400 font-bold">이월 점수</div>
-                        <div class="score-value text-sm font-extrabold text-indigo-700">${score.carryIn >= 0 ? '+' : ''}${score.carryIn}</div>
-                    </div>
-                    <div>
-                        <div class="score-label text-[10px] text-indigo-400 font-bold">이번 주 변화</div>
-                        <div class="score-value text-sm font-extrabold ${score.rawChange >= 0 ? 'text-emerald-600' : 'text-rose-600'}">${score.rawChange >= 0 ? '+' : ''}${score.rawChange}</div>
-                    </div>
-                    <div>
-                        <div class="score-label text-[10px] text-indigo-400 font-bold">현재 잔여</div>
-                        <div class="score-value text-sm font-extrabold ${score.final >= 0 ? 'text-emerald-700' : 'text-rose-700'}">${score.final >= 0 ? '+' : ''}${score.final}</div>
-                    </div>
-                    </div>
                     <div class="fine-summary bg-rose-50 px-6 py-3.5 border-t border-rose-100 flex justify-between items-center">
-                        <span class="text-xs font-bold text-rose-700">정산 예정 금액</span>
-                        <span class="text-sm font-extrabold text-rose-700">${fineAmount.toLocaleString()}원</span>
+                        <span class="fine-amount text-sm font-extrabold text-rose-700">₩${fineAmount.toLocaleString()}</span>
                     </div>
                 </div>
             </section>`;
@@ -557,10 +500,10 @@ async function addNewFriend() {
             target_start_time: time,
                     week_key: MASTER_WEEK_KEY,
             start_week_key: startWeekKey,
-            time_done_list: [false, false, false, false, false, false, false],
-            start_done_list: [false, false, false, false, false, false, false],
-            study_done_list: [false, false, false, false, false, false, false],
-            bonus_done_list: [false, false, false, false, false, false, false],
+            time_done_list: emptyWeekValues(),
+            start_done_list: emptyWeekValues(),
+            study_done_list: emptyWeekValues(),
+            bonus_done_list: emptyWeekValues(),
             notes: defaultNotes,
             day_off_used: false, day_off_day: 0
         }], { onConflict: 'name,week_key', ignoreDuplicates: true });
@@ -573,10 +516,10 @@ async function addNewFriend() {
             target_start_time: time,
             week_key: getWeekStorageKey(),
             start_week_key: startWeekKey,
-            time_done_list: [false, false, false, false, false, false, false],
-            start_done_list: [false, false, false, false, false, false, false],
-            study_done_list: [false, false, false, false, false, false, false],
-            bonus_done_list: [false, false, false, false, false, false, false],
+            time_done_list: emptyWeekValues(),
+            start_done_list: emptyWeekValues(),
+            study_done_list: emptyWeekValues(),
+            bonus_done_list: emptyWeekValues(),
             notes: defaultNotes,
             day_off_used: false, day_off_day: 0
         }], { onConflict: 'name,week_key', ignoreDuplicates: true });
@@ -585,10 +528,10 @@ async function addNewFriend() {
         serverData.push({
             id: Date.now(), name: name.trim(), target_start_time: time, week_key: getWeekStorageKey(),
             start_week_key: startWeekKey,
-            time_done_list: [false, false, false, false, false, false, false],
-            start_done_list: [false, false, false, false, false, false, false],
-            study_done_list: [false, false, false, false, false, false, false],
-            bonus_done_list: [false, false, false, false, false, false, false],
+            time_done_list: emptyWeekValues(),
+            start_done_list: emptyWeekValues(),
+            study_done_list: emptyWeekValues(),
+            bonus_done_list: emptyWeekValues(),
             notes: defaultNotes,
             day_off_used: false, day_off_day: 0
         });
@@ -600,9 +543,9 @@ async function addNewFriend() {
 async function toggleStudyDone(id, idx, currentVal) {
     const friend = serverData.find(f => f.id === id);
     if (!friend) return;
-    if (friend.day_off_used && friend.day_off_day === idx) return;
-    let newList = (friend.study_done_list && friend.study_done_list.length === 7) ? [...friend.study_done_list] : [false,false,false,false,false,false,false];
-    newList[idx] = !currentVal;
+    if (isDayOff(friend, idx)) return;
+    let newList = normalizeWeekValues(friend.study_done_list);
+    newList[idx] = nextCheckValue(currentVal);
 
     if (supabaseClient) {
         const { error } = await supabaseClient.from('study_mate').update({ study_done_list: newList }).eq('id', id);
@@ -617,9 +560,9 @@ async function toggleStudyDone(id, idx, currentVal) {
 async function toggleBonus(id, idx, currentVal) {
     const friend = serverData.find(f => f.id === id);
     if (!friend) return;
-    if (friend.day_off_used && friend.day_off_day === idx) return;
-    let newList = (friend.bonus_done_list && friend.bonus_done_list.length === 7) ? [...friend.bonus_done_list] : [false,false,false,false,false,false,false];
-    newList[idx] = !currentVal;
+    if (isDayOff(friend, idx)) return;
+    let newList = normalizeWeekValues(friend.bonus_done_list);
+    newList[idx] = nextCheckValue(currentVal);
 
     if (supabaseClient) {
         const { error } = await supabaseClient.from('study_mate').update({ bonus_done_list: newList }).eq('id', id);
@@ -634,9 +577,9 @@ async function toggleBonus(id, idx, currentVal) {
 async function toggleCheck(id, index, listName, currentVal) {
     const friend = serverData.find(f => f.id === id);
     if(friend) {
-        if(friend.day_off_used && friend.day_off_day === index) return;
-        let newList = [...friend[listName]];
-        newList[index] = !currentVal;
+        if(isDayOff(friend, index)) return;
+        let newList = normalizeWeekValues(friend[listName]);
+        newList[index] = nextCheckValue(currentVal);
 
         if (supabaseClient) {
             const { error } = await supabaseClient.from('study_mate').update({ [listName]: newList }).eq('id', id);
@@ -653,17 +596,19 @@ async function setDayOff(id) {
     const friend = serverData.find(f => f.id === id);
     if(!friend) return;
 
-    const result = await openDayOffPicker(friend.day_off_used, friend.day_off_day);
+    const result = await openDayOffPicker(dayOffIndices(friend));
     if (result === null) return; // 취소함
 
-    const used = result !== -1;
-    const dayIndex = used ? result : 0;
+    const dayOffList = emptyWeekValues();
+    result.forEach(dayIndex => { dayOffList[dayIndex] = true; });
+    const used = result.length > 0;
+    const dayIndex = used ? result[0] : 0;
 
     if (supabaseClient) {
-        const { error } = await supabaseClient.from('study_mate').update({ day_off_used: used, day_off_day: dayIndex }).eq('id', id);
+        const { error } = await supabaseClient.from('study_mate').update({ day_off_used: used, day_off_day: dayIndex, time_done_list: dayOffList }).eq('id', id);
         if (error) { alert("저장 실패: " + error.message); return; }
     } else {
-        friend.day_off_used = used; friend.day_off_day = dayIndex; saveLocalBackup();
+        friend.day_off_used = used; friend.day_off_day = dayIndex; friend.time_done_list = dayOffList; saveLocalBackup();
     }
     loadServerData();
 }
@@ -708,6 +653,7 @@ Object.assign(window, {
     changeWeek,
     closeBonusPicker,
     closeDayOffPicker,
+    closeTargetWeekPicker,
     closeTimePicker,
     deleteFriend,
     editBonusHours,
@@ -715,7 +661,6 @@ Object.assign(window, {
     setDayOff,
     toggleBonus,
     toggleCheck,
-    toggleDaySelection,
     toggleStudyDone
 });
 

@@ -1,5 +1,3 @@
-@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap");
-
 :root {
     --page-bg: #ffffff;
     --panel-bg: #ffffff;
@@ -13,10 +11,71 @@
     --danger: #b84a4a;
     --success: #3b877b;
     --warning: #a9792b;
+    --radius: 8px;
 }
 
 * {
     box-sizing: border-box;
+}
+
+.hidden {
+    display: none !important;
+}
+
+.flex {
+    display: flex;
+}
+
+.grid {
+    display: grid;
+}
+
+.grid-cols-1 {
+    grid-template-columns: minmax(0, 1fr);
+}
+
+.grid-cols-3 {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.grid-cols-8 {
+    grid-template-columns: repeat(8, minmax(0, 1fr));
+}
+
+.items-center {
+    align-items: center;
+}
+
+.items-start {
+    align-items: flex-start;
+}
+
+.justify-center {
+    justify-content: center;
+}
+
+.justify-between {
+    justify-content: space-between;
+}
+
+.text-center {
+    text-align: center;
+}
+
+.text-left {
+    text-align: left;
+}
+
+.cursor-pointer {
+    cursor: pointer;
+}
+
+.relative {
+    position: relative;
+}
+
+.overflow-hidden {
+    overflow: hidden;
 }
 
 body.study-shell {
@@ -24,7 +83,7 @@ body.study-shell {
     min-height: 100vh;
     background: var(--page-bg) !important;
     color: var(--ink) !important;
-    font-family: "IBM Plex Mono", "IBM Plex Sans KR", monospace !important;
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important;
     font-weight: 400;
 }
 
@@ -110,7 +169,7 @@ body.study-shell ::selection {
 .study-ghost-button,
 .study-modal-button {
     border: 1px solid var(--faint) !important;
-    border-radius: 0 !important;
+    border-radius: var(--radius) !important;
     box-shadow: none !important;
     background: var(--panel-bg) !important;
     color: var(--ink) !important;
@@ -191,8 +250,15 @@ body.study-shell ::selection {
 .study-week-button {
     width: 34px;
     height: 34px;
-    border-radius: 0 !important;
+    border-radius: var(--radius) !important;
     color: var(--muted) !important;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid transparent;
+    background: transparent;
+    font-size: 28px;
+    line-height: 1;
 }
 
 .study-week-button:hover {
@@ -210,7 +276,7 @@ body.study-shell ::selection {
 
 #sync-status {
     border: 0 !important;
-    border-radius: 0 !important;
+    border-radius: var(--radius) !important;
     background: transparent !important;
     color: var(--muted) !important;
     box-shadow: none !important;
@@ -226,49 +292,16 @@ body.study-shell ::selection {
     gap: 12px !important;
 }
 
-.ledger-summary {
-    display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    border: 1px solid var(--faint);
-    background: var(--soft-bg);
-}
-
-.ledger-summary > div {
-    min-width: 0;
-    padding: 13px 14px;
-    border-left: 1px dashed var(--faint);
-}
-
-.ledger-summary > div:first-child {
-    border-left: 0;
-}
-
-.ledger-label {
-    display: block;
-    margin-bottom: 6px;
-    color: var(--muted);
-    font-size: 9px;
-    letter-spacing: 0.14em;
-}
-
-.ledger-summary strong {
-    display: block;
-    color: var(--ink);
-    font-size: 18px;
-    font-weight: 600;
-    line-height: 1.1;
-}
-
 .friend-card {
     border: 1px solid var(--faint) !important;
-    border-radius: 0 !important;
+    border-radius: var(--radius) !important;
     background: var(--panel-bg) !important;
     box-shadow: none !important;
 }
 
 .ledger-row {
     display: grid !important;
-    grid-template-columns: minmax(190px, 0.34fr) minmax(560px, 1fr) minmax(260px, 0.38fr);
+    grid-template-columns: minmax(190px, 0.34fr) minmax(560px, 1fr) minmax(190px, 0.24fr);
     align-items: stretch;
 }
 
@@ -301,7 +334,7 @@ body.study-shell ::selection {
 .ledger-actions {
     display: flex;
     flex-wrap: wrap;
-    gap: 6px;
+    gap: 4px;
 }
 
 .ledger-row-body {
@@ -337,10 +370,12 @@ body.study-shell ::selection {
 
 .card-action-link {
     border: 1px solid var(--faint) !important;
-    border-radius: 0 !important;
+    border-radius: var(--radius) !important;
     background: var(--panel-bg) !important;
     color: var(--ink) !important;
     padding: 2px 6px !important;
+    font-size: 10px !important;
+    line-height: 1.4;
     text-decoration: none !important;
 }
 
@@ -352,33 +387,70 @@ body.study-shell ::selection {
 .day-selector,
 .mark-button {
     border: 1px solid var(--faint) !important;
-    border-radius: 0 !important;
+    border-radius: var(--radius) !important;
     box-shadow: none !important;
     background: var(--panel-bg) !important;
     color: var(--muted) !important;
     font-weight: 500 !important;
 }
 
+.mark-button {
+    border-radius: var(--radius) !important;
+}
+
+.ledger-actions .dayoff-button,
+.ledger-actions .card-action-link {
+    min-height: 24px;
+    padding: 3px 7px !important;
+    font-size: 10px !important;
+    letter-spacing: 0.04em;
+}
+
 .dayoff-button.is-active,
-.day-selector.is-selected,
-.mark-button.is-on {
+.day-selector.is-selected {
     border-color: var(--ink) !important;
     background: var(--ink) !important;
     color: var(--page-bg) !important;
 }
 
-.mark-button.is-off,
-.dayoff-button.is-off {
-    border-color: #eadfcb !important;
-    background: #fffaf0 !important;
-    color: var(--warning) !important;
+.mark-button.is-on {
+    border-color: #3b877b !important;
+    background: #e8f4f1 !important;
+    color: #2b675c !important;
 }
 
-.day-selector-group {
-    border: 1px solid var(--faint) !important;
-    border-radius: 0 !important;
+.mark-button.is-fail {
+    border-color: #ead2d2 !important;
+    background: #fff8f8 !important;
+    color: var(--danger) !important;
+}
+
+.mark-button.is-empty {
+    border-style: dashed !important;
     background: var(--soft-bg) !important;
-    padding: 4px !important;
+    color: #c4c4c4 !important;
+    opacity: 0.72;
+}
+
+.mark-button.is-off {
+    font-size: 8px !important;
+    letter-spacing: 0.04em;
+    border-color: #d6d6d6 !important;
+    background: #f4f4f4 !important;
+    color: #777777 !important;
+}
+
+.mark-button.is-off,
+.dayoff-button.is-off {
+    border-color: #d6d6d6 !important;
+    background: #f4f4f4 !important;
+    color: #777777 !important;
+}
+
+.dayoff-score {
+    color: #777777 !important;
+    font-size: 9px !important;
+    letter-spacing: 0.04em;
 }
 
 .card-grid {
@@ -395,7 +467,7 @@ body.study-shell ::selection {
 
 .target-row {
     border: 1px solid var(--grid);
-    border-radius: 0 !important;
+    border-radius: var(--radius) !important;
     background: var(--soft-bg) !important;
     color: var(--ink) !important;
     font-size: 9px !important;
@@ -448,11 +520,17 @@ body.study-shell ::selection {
     border-top: 1px solid var(--faint) !important;
     background: var(--panel-bg) !important;
     padding: 12px 14px !important;
+    justify-content: center !important;
+    min-height: 100%;
 }
 
 .fine-summary span {
     color: var(--danger) !important;
     letter-spacing: 0.08em;
+}
+
+.fine-amount {
+    font-size: 18px !important;
 }
 
 .text-emerald-600,
@@ -467,16 +545,29 @@ body.study-shell ::selection {
 }
 
 .study-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 16px;
     background: rgb(0 0 0 / 0.28) !important;
     backdrop-filter: none !important;
 }
 
+.study-modal.hidden {
+    display: none !important;
+}
+
 .study-modal-panel {
+    width: 100%;
     max-width: 360px;
     border: 1px solid var(--faint) !important;
-    border-radius: 0 !important;
+    border-radius: var(--radius) !important;
     background: var(--panel-bg) !important;
     box-shadow: 0 16px 40px rgb(0 0 0 / 0.08) !important;
+    padding: 20px;
 }
 
 .study-modal-panel h3 {
@@ -489,15 +580,77 @@ body.study-shell ::selection {
 
 .study-modal-panel select {
     border: 1px solid var(--faint) !important;
-    border-radius: 0 !important;
+    border-radius: var(--radius) !important;
     background: var(--soft-bg) !important;
     color: var(--ink) !important;
     outline: none !important;
 }
 
+.dayoff-week-fields {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    gap: 6px;
+    margin-bottom: 18px;
+}
+
+.dayoff-week-button {
+    min-height: 44px;
+    border: 1px solid var(--faint);
+    border-radius: var(--radius);
+    background: var(--soft-bg);
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.dayoff-week-button.is-selected {
+    border-color: var(--ink);
+    background: var(--ink);
+    color: var(--page-bg);
+}
+
 .study-modal-button.is-primary {
     background: var(--ink) !important;
     color: var(--page-bg) !important;
+}
+
+.modal-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.modal-actions .study-modal-button {
+    flex: 1;
+    min-height: 40px;
+}
+
+.target-week-title {
+    margin-bottom: 16px;
+}
+
+.target-week-fields {
+    display: grid;
+    gap: 8px;
+    margin-bottom: 18px;
+}
+
+.target-week-field {
+    display: grid;
+    grid-template-columns: 42px 1fr;
+    align-items: center;
+    gap: 10px;
+    color: var(--muted);
+    font-size: 12px;
+}
+
+.target-week-field input {
+    width: 100%;
+    border: 1px solid var(--faint);
+    border-radius: var(--radius);
+    background: var(--soft-bg);
+    color: var(--ink);
+    padding: 9px 10px;
 }
 
 @media (min-width: 768px) {
@@ -515,7 +668,7 @@ body.study-shell ::selection {
     }
 
     .ledger-row {
-        grid-template-columns: minmax(210px, 0.32fr) minmax(680px, 1fr) minmax(300px, 0.36fr);
+        grid-template-columns: minmax(210px, 0.32fr) minmax(720px, 1fr) minmax(210px, 0.22fr);
     }
 }
 
@@ -536,18 +689,6 @@ body.study-shell ::selection {
         font-size: 10px !important;
     }
 
-    .ledger-summary {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-
-    .ledger-summary > div:nth-child(odd) {
-        border-left: 0;
-    }
-
-    .ledger-summary > div:nth-child(n + 3) {
-        border-top: 1px dashed var(--faint);
-    }
-
     .ledger-row {
         grid-template-columns: 1fr;
     }
@@ -566,8 +707,7 @@ body.study-shell ::selection {
         overflow-x: auto;
     }
 
-    .card-grid,
-    .day-selector-group {
+    .card-grid {
         min-width: 520px;
     }
 }
