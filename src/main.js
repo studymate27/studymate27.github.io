@@ -449,9 +449,10 @@ window.addEventListener('pointermove', (e) => {
             const els = [...container.children];
             const cardIndex = els.indexOf(cardEl);
             const targetIndex = els.indexOf(el);
-            const midpoint = rect.top + rect.height / 2;
-            const movingDown = direction > 0 && targetIndex > cardIndex && e.clientY > midpoint;
-            const movingUp = direction < 0 && targetIndex < cardIndex && e.clientY < midpoint;
+            const downThreshold = rect.top + rect.height / 3;
+            const upThreshold = rect.bottom - rect.height / 3;
+            const movingDown = direction > 0 && targetIndex > cardIndex && e.clientY > downThreshold;
+            const movingUp = direction < 0 && targetIndex < cardIndex && e.clientY < upThreshold;
             if (!movingDown && !movingUp) break;
             animateCardReorder(container, () => {
                 if (movingUp) {
