@@ -622,7 +622,7 @@ body.study-shell ::selection {
 
 .fine-summary {
     position: relative;
-    border-top: 1px solid var(--faint) !important;
+    border-top: 0 !important;
     background: var(--panel-bg) !important;
     padding: 14px !important;
     display: flex !important;
