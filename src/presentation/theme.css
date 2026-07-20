@@ -935,6 +935,10 @@ body.study-shell ::selection {
         gap: 12px;
     }
 
+    .drag-handle::after {
+        display: none;
+    }
+
     .ledger-row-body {
         padding: 10px 8px;
         overflow-x: hidden;
