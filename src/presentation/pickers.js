@@ -2,37 +2,50 @@ let bonusPickerResolve = null;
 let timePickerResolve = null;
 let dayOffResolve = null;
 let targetWeekResolve = null;
+let fineUnitResolve = null;
 
 const dayLabels = ["월", "화", "수", "목", "금", "토", "일"];
 
 function normalizeTimeText(value) {
     const raw = String(value || "").trim();
     const compact = raw.replace(/[^\d]/g, "");
+    if (compact.length === 1 || compact.length === 2) {
+        const hour = Math.min(23, Number(compact));
+        return `${String(hour).padStart(2, "0")}:00`;
+    }
+    if (compact.length === 3) {
+        const hour = Math.min(23, Number(compact.slice(0, 1)));
+        const minute = Math.min(59, Number(compact.slice(1, 3)));
+        return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+    }
     if (compact.length === 4) {
-        const hour = Number(compact.slice(0, 2));
-        const minute = Number(compact.slice(2, 4));
-        if (hour >= 0 && hour <= 23 && minute >= 0 && minute <= 59) {
-            return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
-        }
+        const hour = Math.min(23, Number(compact.slice(0, 2)));
+        const minute = Math.min(59, Number(compact.slice(2, 4)));
+        return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
     }
 
     const match = raw.match(/^(\d{1,2}):(\d{1,2})$/);
     if (match) {
-        const hour = Number(match[1]);
-        const minute = Number(match[2]);
-        if (hour >= 0 && hour <= 23 && minute >= 0 && minute <= 59) {
-            return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
-        }
+        const hour = Math.min(23, Number(match[1]));
+        const minute = Math.min(59, Number(match[2]));
+        return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
     }
 
     return "08:40";
 }
 
-export function openBonusPicker(defaultVal) {
+function formatTimeTyping(value) {
+    const digits = String(value || "").replace(/[^\d]/g, "").slice(0, 4);
+    if (digits.length <= 2) return digits;
+    return `${digits.slice(0, 2)}:${digits.slice(2)}`;
+}
+
+export function openBonusPicker(defaultVal, title = "상점 기준 시간") {
     return new Promise(resolve => {
         bonusPickerResolve = resolve;
         const input = document.getElementById("bonus-hour-input");
         input.value = Number.isFinite(defaultVal) ? String(defaultVal) : "7";
+        document.getElementById("bonus-picker-title").innerText = title;
         const modal = document.getElementById("bonus-picker-modal");
         modal.classList.remove("hidden");
         modal.classList.add("flex");
@@ -54,6 +67,33 @@ export function closeBonusPicker(confirmed) {
         }
         bonusPickerResolve = null;
     }
+}
+
+export function openFineUnitPicker(defaultVal) {
+    return new Promise(resolve => {
+        fineUnitResolve = resolve;
+        const input = document.getElementById("fine-unit-input");
+        input.value = Number.isFinite(defaultVal) ? String(defaultVal) : "500";
+        const modal = document.getElementById("fine-unit-picker-modal");
+        modal.classList.remove("hidden");
+        modal.classList.add("flex");
+        setTimeout(() => input.focus(), 0);
+    });
+}
+
+export function closeFineUnitPicker(confirmed) {
+    const modal = document.getElementById("fine-unit-picker-modal");
+    modal.classList.add("hidden");
+    modal.classList.remove("flex");
+    if (!fineUnitResolve) return;
+    if (!confirmed) {
+        fineUnitResolve(null);
+    } else {
+        const raw = parseInt(document.getElementById("fine-unit-input").value, 10);
+        const value = Number.isFinite(raw) ? Math.min(100000, Math.max(100, Math.round(raw / 100) * 100)) : 500;
+        fineUnitResolve(value);
+    }
+    fineUnitResolve = null;
 }
 
 export function openTimePicker(defaultTime, title) {
@@ -136,10 +176,18 @@ export function openTargetWeekPicker(defaultTargets) {
             return `
                 <label class="target-week-field">
                     <span>${day}</span>
-                    <input type="text" inputmode="numeric" autocomplete="off" placeholder="13:00" value="${value}" data-target-day="${index}" />
+                    <input type="text" inputmode="numeric" autocomplete="off" maxlength="5" placeholder="13:00" value="${value}" data-target-day="${index}" />
                 </label>
             `;
         }).join("");
+        fields.querySelectorAll("[data-target-day]").forEach(input => {
+            input.addEventListener("input", () => {
+                input.value = formatTimeTyping(input.value);
+            });
+            input.addEventListener("blur", () => {
+                input.value = normalizeTimeText(input.value);
+            });
+        });
         const modal = document.getElementById("target-week-modal");
         modal.classList.remove("hidden");
         modal.classList.add("flex");

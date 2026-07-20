@@ -1,16 +1,18 @@
 import { MASTER_WEEK_KEY, SETTINGS_NAME, SETTINGS_WEEK_KEY } from "./application/settings.js";
 import { formatDday, getDday, getWeekDates, parseDateKey, parseWeekKeyDate } from "./domain/dates.js";
-import { computeScoreChain, dayDeltaDisplay, dayOffIndices } from "./domain/scoring.js";
+import { computeScoreChain, computeWeekRaw, dayDeltaDisplay, dayOffIndices } from "./domain/scoring.js";
 import { parseDayTargets } from "./domain/targets.js";
 import { readFriendOrder, readLocalBackup, writeFriendOrder, writeLocalBackup } from "./infrastructure/local-storage.js";
 import { createSupabaseClient, ensureSupabaseLib } from "./infrastructure/supabase-client.js";
 import {
     closeBonusPicker,
     closeDayOffPicker,
+    closeFineUnitPicker,
     closeTargetWeekPicker,
     closeTimePicker,
     openBonusPicker,
     openDayOffPicker,
+    openFineUnitPicker,
     openTargetWeekPicker,
     openTimePicker
 } from "./presentation/pickers.js";
@@ -25,6 +27,8 @@ let syncedWeeks = new Set(); // 이미 마스터 동기화를 완료한 주차 (
 // ===== 상점/벌점 시스템 =====
 // (공부 최소기준은 이제 study_done_list 토글로 직접 판단해요)
 let bonusHours = 7;                  // 보너스 기준(표시용) - 실제 보너스 지급은 별 토글로 직접 판단
+let minimumHours = 3;                // 공부시간 미달성 판단 기준(표시용)
+let fineUnit = 500;                  // 벌점 1점당 벌금
 let masterByName = {};               // name -> master_list row
 let rowsByNameWeek = {};             // name -> { weekKey: row }
 
@@ -46,9 +50,119 @@ function isDayOff(friend, dayIndex) {
     return dayOffIndices(friend).includes(dayIndex);
 }
 
+function readRowMeta(row) {
+    if (!row || !row.Notes) return {};
+    try {
+        const parsed = JSON.parse(row.Notes);
+        return parsed && typeof parsed === "object" ? parsed : {};
+    } catch(e) {
+        return {};
+    }
+}
+
+function writeRowMeta(row, updates) {
+    return JSON.stringify({ ...readRowMeta(row), ...updates });
+}
+
+function isFinePaid(friend) {
+    return readRowMeta(friend).finePaid === true;
+}
+
+function weekTime(weekKey) {
+    const date = parseWeekKeyDate(weekKey);
+    return date ? date.getTime() : null;
+}
+
+function hasPaymentAtOrAfter(targetWeekKey, weeksMap) {
+    const targetTime = weekTime(targetWeekKey);
+    if (targetTime === null || !weeksMap) return false;
+    return Object.entries(weeksMap).some(([weekKey, row]) => {
+        const rowTime = weekTime(weekKey);
+        return rowTime !== null && rowTime >= targetTime && isFinePaid(row);
+    });
+}
+
+function lastPaymentTimeOnOrBefore(targetWeekKey, weeksMap) {
+    const targetTime = weekTime(targetWeekKey);
+    if (targetTime === null || !weeksMap) return null;
+    let paidTime = null;
+    Object.entries(weeksMap).forEach(([weekKey, row]) => {
+        const rowTime = weekTime(weekKey);
+        if (rowTime !== null && rowTime <= targetTime && isFinePaid(row)) {
+            paidTime = paidTime === null ? rowTime : Math.max(paidTime, rowTime);
+        }
+    });
+    return paidTime;
+}
+
+function computeFineState(targetWeekKey, weeksMap, startWeekKey) {
+    let cursor = parseWeekKeyDate(startWeekKey);
+    const target = parseWeekKeyDate(targetWeekKey);
+    if (!cursor || !target) return { unpaidFinePoints: 0, settledThroughTarget: false };
+
+    if (hasPaymentAtOrAfter(targetWeekKey, weeksMap)) {
+        return { unpaidFinePoints: 0, settledThroughTarget: true };
+    }
+
+    const paidThroughTime = lastPaymentTimeOnOrBefore(targetWeekKey, weeksMap);
+
+    let points = 0;
+    let safety = 0;
+    while (cursor <= target && safety < 400) {
+        safety++;
+        const wk = `week_${cursor.getFullYear()}-${cursor.getMonth() + 1}-${cursor.getDate()}`;
+        const currentTime = cursor.getTime();
+        const row = weeksMap ? weeksMap[wk] : null;
+        const raw = computeWeekRaw(row, wk);
+        if ((paidThroughTime === null || currentTime > paidThroughTime) && raw < 0) {
+            points += Math.abs(raw);
+        }
+        cursor = new Date(cursor);
+        cursor.setDate(cursor.getDate() + 7);
+    }
+    return { unpaidFinePoints: points, settledThroughTarget: points === 0 };
+}
+
 function updateBonusLabel() {
     const el = document.getElementById('bonus-hours-label');
     if (el) el.innerText = bonusHours + "시간+";
+}
+
+function updateMinimumLabel() {
+    const el = document.getElementById('minimum-hours-label');
+    if (el) el.innerText = minimumHours + "시간+";
+}
+
+function updateFineUnitLabel() {
+    const el = document.getElementById('fine-unit-label');
+    if (el) el.innerText = `${fineUnit.toLocaleString()}원`;
+}
+
+function formatBonusShortLabel() {
+    return `${Number.isInteger(bonusHours) ? bonusHours : bonusHours.toFixed(1)}h +`;
+}
+
+async function saveGlobalSettings() {
+    if (!supabaseClient) return true;
+    const { error } = await supabaseClient.from('study_mate').upsert([{
+        id: -1,
+        name: SETTINGS_NAME,
+        week_key: SETTINGS_WEEK_KEY,
+        target_start_time: null,
+        start_week_key: null,
+        time_done_list: [],
+        start_done_list: [],
+        study_done_list: [],
+        bonus_done_list: [],
+        notes: JSON.stringify({ bonusHours, minimumHours, fineUnit }),
+        day_off_used: false,
+        day_off_day: 0
+    }], { onConflict: 'name,week_key' });
+    if (error) {
+        alert("저장 실패: " + error.message);
+        return false;
+    }
+    return true;
 }
 
 async function editBonusHours() {
@@ -56,23 +170,25 @@ async function editBonusHours() {
     if (val === null) return; // 취소함
     bonusHours = val;
     updateBonusLabel();
-    if (supabaseClient) {
-        const { error } = await supabaseClient.from('study_mate').upsert([{
-            id: -1,
-            name: SETTINGS_NAME,
-            week_key: SETTINGS_WEEK_KEY,
-            target_start_time: null,
-            start_week_key: null,
-            time_done_list: [],
-            start_done_list: [],
-            study_done_list: [],
-            bonus_done_list: [],
-            notes: JSON.stringify({ bonusHours: val }),
-            day_off_used: false,
-            day_off_day: 0
-        }], { onConflict: 'name,week_key' });
-        if (error) { alert("저장 실패: " + error.message); return; }
-    }
+    if (!(await saveGlobalSettings())) return;
+    loadServerData();
+}
+
+async function editMinimumHours() {
+    const val = await openBonusPicker(minimumHours, "공부 최소 기준 시간");
+    if (val === null) return;
+    minimumHours = val;
+    updateMinimumLabel();
+    if (!(await saveGlobalSettings())) return;
+    loadServerData();
+}
+
+async function editFineUnit() {
+    const val = await openFineUnitPicker(fineUnit);
+    if (val === null) return;
+    fineUnit = val;
+    updateFineUnitLabel();
+    if (!(await saveGlobalSettings())) return;
     loadServerData();
 }
 
@@ -179,9 +295,13 @@ async function loadServerData() {
             try {
                 const parsed = JSON.parse(settingsRow.notes);
                 if (parsed && parsed.bonusHours) bonusHours = Number(parsed.bonusHours);
+                if (parsed && parsed.minimumHours) minimumHours = Number(parsed.minimumHours);
+                if (parsed && parsed.fineUnit) fineUnit = Number(parsed.fineUnit);
             } catch(e) {}
         }
         updateBonusLabel();
+        updateMinimumLabel();
+        updateFineUnitLabel();
 
                 const masterRows = allRows.filter(r => r.week_key === MASTER_WEEK_KEY);
         masterByName = {};
@@ -235,10 +355,15 @@ function saveLocalOrder(orderNames) {
 }
 function applyLocalOrder(rows) {
     const order = getLocalOrder();
-    if (order.length === 0) return rows;
-    const known = rows.filter(r => order.includes(r.name));
-    const unknown = rows.filter(r => !order.includes(r.name)); // 새로 등록된 친구는 뒤에 붙음
-    known.sort((a, b) => order.indexOf(a.name) - order.indexOf(b.name));
+    const masterOrder = Object.values(masterByName)
+        .sort((a, b) => Number(a.id || 0) - Number(b.id || 0))
+        .map(row => row.name);
+    const effectiveOrder = order.length > 0 ? order : masterOrder;
+    if (effectiveOrder.length === 0) return rows;
+    const known = rows.filter(r => effectiveOrder.includes(r.name));
+    const unknown = rows.filter(r => !effectiveOrder.includes(r.name)); // 새로 등록된 친구는 뒤에 붙음
+    known.sort((a, b) => effectiveOrder.indexOf(a.name) - effectiveOrder.indexOf(b.name));
+    unknown.sort((a, b) => Number(a.id || 0) - Number(b.id || 0));
     return [...known, ...unknown];
 }
 function finalizeOrderFromDOM() {
@@ -247,57 +372,87 @@ function finalizeOrderFromDOM() {
     saveLocalOrder(order);
 }
 
-// 드래그 핸들(⠿)을 꾹 누르면(long-press) 드래그 모드 진입, 손가락/마우스를 움직이면
-// 그 위치의 카드와 순서를 바꾸고, 손을 떼면 이 기기에 순서를 저장한다.
+// 드래그 핸들(⠿)을 누르고 움직이면 그 위치의 카드와 순서를 바꾸고,
+// 손을 떼면 이 기기에 순서를 저장한다.
 // (window 리스너는 렌더할 때마다 쌓이지 않도록 한 번만 등록하고, 전역 상태로 어떤 카드가
 //  드래그 중인지 추적한다.)
-const dragState = { cardEl: null, dragging: false, timer: null };
+const dragState = { cardEl: null, dragging: false, lastY: 0 };
 
-function cancelLongPress() {
-    clearTimeout(dragState.timer);
-}
 function endDragGlobal() {
     if (dragState.dragging && dragState.cardEl) {
-        dragState.cardEl.classList.remove('ring-2', 'ring-indigo-400', 'opacity-80', 'z-50');
+        dragState.cardEl.classList.remove('is-dragging');
         finalizeOrderFromDOM();
     }
     dragState.dragging = false;
     dragState.cardEl = null;
-    clearTimeout(dragState.timer);
+    dragState.lastY = 0;
 }
 
 function attachDragHandlers(handleEl, cardEl) {
     handleEl.addEventListener('pointerdown', (e) => {
         e.preventDefault();
-        dragState.timer = setTimeout(() => {
-            dragState.dragging = true;
-            dragState.cardEl = cardEl;
-            cardEl.classList.add('ring-2', 'ring-indigo-400', 'opacity-80', 'z-50');
-            if (navigator.vibrate) navigator.vibrate(25);
-        }, 400);
+        dragState.dragging = true;
+        dragState.cardEl = cardEl;
+        dragState.lastY = e.clientY;
+        cardEl.classList.add('is-dragging');
+        try { handleEl.setPointerCapture(e.pointerId); } catch(e2) {}
+        if (navigator.vibrate) navigator.vibrate(15);
     });
     handleEl.addEventListener('pointerup', endDragGlobal);
     handleEl.addEventListener('pointercancel', endDragGlobal);
-    handleEl.addEventListener('pointerleave', () => { if (!dragState.dragging) cancelLongPress(); });
+}
+
+function animateCardReorder(container, move) {
+    const cards = [...container.querySelectorAll('.friend-card')];
+    const firstRects = new Map(cards.map(card => [card, card.getBoundingClientRect()]));
+    move();
+    cards.forEach(card => {
+        const first = firstRects.get(card);
+        const last = card.getBoundingClientRect();
+        const deltaY = first ? first.top - last.top : 0;
+        if (!deltaY) return;
+        card.style.transition = 'none';
+        card.style.transform = `translateY(${deltaY}px)`;
+        requestAnimationFrame(() => {
+            card.style.transition = 'transform 180ms ease';
+            card.style.transform = '';
+        });
+    });
 }
 
 // 전역 리스너는 딱 한 번만 등록
 window.addEventListener('pointermove', (e) => {
-            if (!dragState.dragging || !dragState.cardEl) return;
-            const container = document.getElementById('friends-container');
-            const cardEl = dragState.cardEl;
-            const siblings = [...container.querySelectorAll('.friend-card')].filter(el => el !== cardEl);
-            for (const el of siblings) {
+    if (!dragState.dragging || !dragState.cardEl) return;
+    e.preventDefault();
+    const container = document.getElementById('friends-container');
+    const cardEl = dragState.cardEl;
+    const direction = e.clientY - dragState.lastY;
+    if (Math.abs(direction) < 2) return;
+    const siblings = [...container.querySelectorAll('.friend-card')].filter(el => el !== cardEl);
+    let reordered = false;
+    for (const el of siblings) {
         const rect = el.getBoundingClientRect();
         if (e.clientY > rect.top && e.clientY < rect.bottom) {
             const els = [...container.children];
-            if (els.indexOf(el) < els.indexOf(cardEl)) {
-                container.insertBefore(cardEl, el);
-            } else {
-                container.insertBefore(cardEl, el.nextSibling);
-            }
+            const cardIndex = els.indexOf(cardEl);
+            const targetIndex = els.indexOf(el);
+            const midpoint = rect.top + rect.height / 2;
+            const movingDown = direction > 0 && targetIndex > cardIndex && e.clientY > midpoint;
+            const movingUp = direction < 0 && targetIndex < cardIndex && e.clientY < midpoint;
+            if (!movingDown && !movingUp) break;
+            animateCardReorder(container, () => {
+                if (movingUp) {
+                    container.insertBefore(cardEl, el);
+                } else if (movingDown) {
+                    container.insertBefore(cardEl, el.nextSibling);
+                }
+            });
+            reordered = true;
             break;
         }
+    }
+    if (reordered || Math.abs(direction) > 8) {
+        dragState.lastY = e.clientY;
     }
 });
 window.addEventListener('pointerup', () => { if (dragState.dragging) endDragGlobal(); });
@@ -360,6 +515,8 @@ function renderApp() {
     const weekKey = getWeekStorageKey();
     const today = new Date();
     today.setHours(0,0,0,0);
+    const currentWeekEnd = parseDateKey(currentWeekDates[6].storageKey);
+    const currentWeekEnded = currentWeekEnd < today;
 
     const orderedData = applyLocalOrder(serverData);
     const viewRows = orderedData.map(friend => {
@@ -376,14 +533,21 @@ function renderApp() {
         const weeksMap = rowsByNameWeek[friend.name] || {};
         weeksMap[weekKey] = friend; // 이번 주는 화면에 그려지는 최신 friend 객체를 그대로 사용
         const score = computeScoreChain(friend.name, weekKey, weeksMap, startWeekKey);
-        const fineAmount = score.final < 0 ? Math.abs(score.final) * 500 : 0;
+        const fineState = computeFineState(weekKey, weeksMap, startWeekKey);
+        const unpaidFinePoints = fineState.unpaidFinePoints;
+        const fineAmount = unpaidFinePoints * fineUnit;
+        const finePaid = fineState.settledThroughTarget;
+        const currentWeekPaid = isFinePaid(friend);
+        const fineTone = fineAmount > 0 ? "is-negative" : score.final > 0 ? "is-positive" : "is-zero";
+        const fineDisplay = fineAmount > 0 ? `-₩${fineAmount.toLocaleString()}` : `₩${fineAmount.toLocaleString()}`;
+        const paymentTone = finePaid ? "is-paid" : currentWeekEnded && fineAmount > 0 ? "is-overdue" : "is-open";
 
-        return { friend, dayTargets, dayOffDays, score, fineAmount };
+        return { friend, dayTargets, dayOffDays, score, fineAmount, fineDisplay, finePaid, currentWeekPaid, fineTone, paymentTone };
     });
 
     container.innerHTML = "";
 
-    viewRows.forEach(({ friend, dayTargets, dayOffDays, score, fineAmount }) => {
+    viewRows.forEach(({ friend, dayTargets, dayOffDays, score, fineAmount, fineDisplay, finePaid, currentWeekPaid, fineTone, paymentTone }) => {
 
         let cardHtml = `
             <section class="friend-card ledger-row bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden relative">
@@ -405,48 +569,48 @@ function renderApp() {
                 <div class="ledger-row-body">
                     <div class="card-grid space-y-3">
                         <div class="card-grid-header grid grid-cols-8 text-center text-[10px] font-bold text-slate-400 pb-1 border-b border-slate-100">
-                            <div>구분</div>${currentWeekDates.map(d => `<div>${d.label}</div>`).join('')}
+                            <div class="row-label">구분</div>${currentWeekDates.map(d => `<div>${d.label}</div>`).join('')}
                         </div>
 
                         <div class="target-row grid grid-cols-8 text-center text-[9px] font-bold text-indigo-600 bg-indigo-50/70 py-0.5 rounded-md">
-                            <div class="text-slate-400">목표시간</div>
+                            <div class="row-label">목표시간</div>
                             ${dayTargets.map(t => `<div>${t}</div>`).join('')}
                         </div>
 
                         <div class="grid grid-cols-8 items-center text-center">
-                            <div class="row-label text-[11px] font-bold text-slate-500 text-left">공부시간</div>
+                            <div class="row-label text-[11px] font-bold text-slate-500">공부시간</div>
                             ${friend.study_done_list.map((v, idx) => {
                                 const isOff = isDayOff(friend, idx);
                                 return `<div class="flex justify-center">
                                     <button onclick="toggleStudyDone(${friend.id}, ${idx}, ${v})" class="mark-button ${isOff ? 'is-off' : v === true ? 'is-on' : v === false ? 'is-fail' : 'is-empty'} w-6 h-6 rounded-md flex items-center justify-center border text-sm cursor-pointer transition ${isOff ? 'bg-amber-100 border-amber-100 text-amber-600' : v === true ? 'bg-indigo-50 border-indigo-300 text-indigo-500' : 'bg-white border-slate-200 text-slate-300'}">
-                                        ${isOff ? 'OFF' : (v === true ? '●' : v === false ? '○' : '-')}
+                                        ${isOff ? 'OFF' : (v === true ? '○' : v === false ? 'X' : '')}
                                     </button>
                                 </div>`;
                             }).join('')}
                         </div>
                         <div class="grid grid-cols-8 items-center text-center">
-                            <div class="row-label text-[11px] font-bold text-slate-500 text-left">상점</div>
+                            <div class="row-label text-[11px] font-bold text-slate-500">${formatBonusShortLabel()}</div>
                             ${friend.bonus_done_list.map((v, idx) => {
                                 const isOff = isDayOff(friend, idx);
                                 return `<div class="flex justify-center">
                                     <button onclick="toggleBonus(${friend.id}, ${idx}, ${v})" class="mark-button ${isOff ? 'is-off' : v === true ? 'is-on' : v === false ? 'is-fail' : 'is-empty'} w-6 h-6 rounded-md flex items-center justify-center border text-sm cursor-pointer transition ${isOff ? 'bg-amber-100 border-amber-100 text-amber-600' : v === true ? 'bg-lime-50 border-lime-300 text-lime-500' : 'bg-white border-slate-200 text-slate-300'}">
-                                        ${isOff ? 'OFF' : (v === true ? '★' : v === false ? '☆' : '-')}
+                                        ${isOff ? 'OFF' : (v === true ? '○' : v === false ? 'X' : '')}
                                     </button>
                                 </div>`;
                             }).join('')}
                         </div>
                         <div class="grid grid-cols-8 items-center text-center">
-                            <div class="row-label text-[11px] font-bold text-slate-500 text-left">시작시간</div>
+                            <div class="row-label text-[11px] font-bold text-slate-500">시작시간</div>
                             ${friend.start_done_list.map((v, idx) => `
                                 <div class="flex justify-center">
                                     <button onclick="toggleCheck(${friend.id}, ${idx}, 'start_done_list', ${v})" class="mark-button ${isDayOff(friend, idx) ? 'is-off' : v === true ? 'is-on' : v === false ? 'is-fail' : 'is-empty'} w-6 h-6 rounded-md flex items-center justify-center border text-xs cursor-pointer ${isDayOff(friend, idx) ? 'bg-amber-100 border-amber-100 text-amber-600' : v === true ? 'bg-emerald-50 border-emerald-200 text-emerald-600 font-bold' : 'bg-white border-slate-200'}">
-                                        ${isDayOff(friend, idx) ? 'OFF' : v === true ? 'O' : v === false ? 'X' : '-'}
+                                        ${isDayOff(friend, idx) ? 'OFF' : v === true ? 'O' : v === false ? 'X' : ''}
                                     </button>
                                 </div>
                             `).join('')}
                         </div>
                         <div class="score-row grid grid-cols-8 items-center text-center pt-1 border-t border-dashed border-slate-100">
-                            <div class="row-label text-[11px] font-bold text-slate-500 text-left">일일점수</div>
+                            <div class="row-label text-[11px] font-bold text-slate-500">일일점수</div>
                             ${(() => {
                                 const dates = currentWeekDates.map((_, idx) => {
                                     const [y,m,d] = currentWeekDates[idx].storageKey.split('-').map(Number);
@@ -464,8 +628,11 @@ function renderApp() {
                     </div>
                 </div>
                 <div class="ledger-row-foot">
-                    <div class="fine-summary bg-rose-50 px-6 py-3.5 border-t border-rose-100 flex justify-between items-center">
-                        <span class="fine-amount text-sm font-extrabold text-rose-700">₩${fineAmount.toLocaleString()}</span>
+                    <div class="fine-summary bg-rose-50 px-6 py-3.5 border-t border-rose-100 flex justify-between items-center ${fineTone} ${finePaid ? 'is-paid' : ''}">
+                        <button onclick="toggleFinePaid(${friend.id})" class="fine-paid-button ${paymentTone} ${currentWeekPaid ? 'is-current-paid' : ''} cursor-pointer" aria-pressed="${currentWeekPaid}">
+                            입금
+                        </button>
+                        <span class="fine-amount text-sm font-extrabold text-rose-700">${fineDisplay}</span>
                     </div>
                 </div>
             </section>`;
@@ -592,6 +759,22 @@ async function toggleCheck(id, index, listName, currentVal) {
     }
 }
 
+async function toggleFinePaid(id) {
+    const friend = serverData.find(f => f.id === id);
+    if (!friend) return;
+    const nextPaid = !isFinePaid(friend);
+    const nextNotes = writeRowMeta(friend, { finePaid: nextPaid });
+
+    if (supabaseClient) {
+        const { error } = await supabaseClient.from('study_mate').update({ Notes: nextNotes }).eq('id', id);
+        if (error) { alert("저장 실패: " + error.message); return; }
+    } else {
+        friend.Notes = nextNotes;
+        saveLocalBackup();
+    }
+    loadServerData();
+}
+
 async function setDayOff(id) {
     const friend = serverData.find(f => f.id === id);
     if(!friend) return;
@@ -631,6 +814,8 @@ async function bootApp() {
     // 1) 네트워크/CDN과 무관하게 즉시 표시되어야 하는 것들
     updateDDays();
     updateBonusLabel();
+    updateMinimumLabel();
+    updateFineUnitLabel();
     currentWeekDates = getWeekDates(weekOffset);
     document.getElementById('week-title').innerText =
         `${currentWeekDates[0].label.split('(')[0]} ~ ${currentWeekDates[6].label.split('(')[0]} 현황`;
@@ -653,14 +838,18 @@ Object.assign(window, {
     changeWeek,
     closeBonusPicker,
     closeDayOffPicker,
+    closeFineUnitPicker,
     closeTargetWeekPicker,
     closeTimePicker,
     deleteFriend,
     editBonusHours,
+    editFineUnit,
+    editMinimumHours,
     editSelectedDaysTarget,
     setDayOff,
     toggleBonus,
     toggleCheck,
+    toggleFinePaid,
     toggleStudyDone
 });
 

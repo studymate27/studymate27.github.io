@@ -230,6 +230,31 @@ body.study-shell ::selection {
     text-align: left !important;
 }
 
+.rulebar-setting-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    min-height: 22px;
+    margin: 0 2px;
+    padding: 2px 7px;
+    border: 1px solid var(--faint);
+    border-radius: var(--radius);
+    background: var(--panel-bg);
+    color: var(--ink);
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+}
+
+.rulebar-setting-button i {
+    font-size: 9px;
+}
+
+.rulebar-setting-button:hover {
+    border-color: var(--ink);
+    background: var(--hover-bg);
+}
+
 .study-main {
     padding: 24px 28px 88px !important;
 }
@@ -297,6 +322,16 @@ body.study-shell ::selection {
     border-radius: var(--radius) !important;
     background: var(--panel-bg) !important;
     box-shadow: none !important;
+    transition: transform 160ms ease, border-color 160ms ease, box-shadow 160ms ease, opacity 160ms ease;
+    will-change: transform;
+}
+
+.friend-card.is-dragging {
+    z-index: 20;
+    border-color: var(--ink) !important;
+    box-shadow: 0 12px 28px rgb(0 0 0 / 0.08) !important;
+    opacity: 0.92;
+    transform: scale(1.01);
 }
 
 .ledger-row {
@@ -357,7 +392,35 @@ body.study-shell ::selection {
 }
 
 .drag-handle {
-    color: var(--quiet) !important;
+    position: absolute;
+    inset: 0 auto 0 0;
+    z-index: 5;
+    width: 18px;
+    color: transparent !important;
+    cursor: grab;
+    touch-action: none;
+}
+
+.drag-handle::after {
+    content: "";
+    position: absolute;
+    top: 12px;
+    bottom: 12px;
+    left: 6px;
+    width: 2px;
+    border-radius: 999px;
+    background: var(--quiet);
+    opacity: 0;
+    transition: opacity 120ms ease;
+}
+
+.friend-card:hover .drag-handle::after,
+.friend-card.is-dragging .drag-handle::after {
+    opacity: 0.65;
+}
+
+.friend-card.is-dragging .drag-handle {
+    cursor: grabbing;
 }
 
 .card-hint {
@@ -373,9 +436,9 @@ body.study-shell ::selection {
     border-radius: var(--radius) !important;
     background: var(--panel-bg) !important;
     color: var(--ink) !important;
-    padding: 2px 6px !important;
+    padding: 0 12px !important;
     font-size: 10px !important;
-    line-height: 1.4;
+    line-height: 1;
     text-decoration: none !important;
 }
 
@@ -387,7 +450,6 @@ body.study-shell ::selection {
 .day-selector,
 .mark-button {
     border: 1px solid var(--faint) !important;
-    border-radius: var(--radius) !important;
     box-shadow: none !important;
     background: var(--panel-bg) !important;
     color: var(--muted) !important;
@@ -395,13 +457,18 @@ body.study-shell ::selection {
 }
 
 .mark-button {
-    border-radius: var(--radius) !important;
+    width: 28px !important;
+    height: 28px !important;
+    border-radius: 999px !important;
+    background: transparent !important;
+    line-height: 1 !important;
 }
 
 .ledger-actions .dayoff-button,
 .ledger-actions .card-action-link {
-    min-height: 24px;
-    padding: 3px 7px !important;
+    min-height: 32px;
+    border-radius: var(--radius) !important;
+    padding: 0 12px !important;
     font-size: 10px !important;
     letter-spacing: 0.04em;
 }
@@ -415,19 +482,19 @@ body.study-shell ::selection {
 
 .mark-button.is-on {
     border-color: #3b877b !important;
-    background: #e8f4f1 !important;
+    background: #ffffff !important;
     color: #2b675c !important;
 }
 
 .mark-button.is-fail {
-    border-color: #ead2d2 !important;
-    background: #fff8f8 !important;
+    border-color: #d99a9a !important;
+    background: #ffffff !important;
     color: var(--danger) !important;
 }
 
 .mark-button.is-empty {
     border-style: dashed !important;
-    background: var(--soft-bg) !important;
+    background: transparent !important;
     color: #c4c4c4 !important;
     opacity: 0.72;
 }
@@ -435,16 +502,16 @@ body.study-shell ::selection {
 .mark-button.is-off {
     font-size: 8px !important;
     letter-spacing: 0.04em;
-    border-color: #d6d6d6 !important;
-    background: #f4f4f4 !important;
-    color: #777777 !important;
+    border-color: transparent !important;
+    background: transparent !important;
+    color: #9a9a9a !important;
 }
 
 .mark-button.is-off,
 .dayoff-button.is-off {
-    border-color: #d6d6d6 !important;
-    background: #f4f4f4 !important;
-    color: #777777 !important;
+    border-color: transparent !important;
+    background: transparent !important;
+    color: #9a9a9a !important;
 }
 
 .dayoff-score {
@@ -479,6 +546,14 @@ body.study-shell ::selection {
     font-size: 10px !important;
     font-weight: 500 !important;
     letter-spacing: 0.08em;
+    padding-left: 0 !important;
+    text-align: center !important;
+}
+
+.card-grid-header .row-label,
+.target-row .row-label,
+.score-row .row-label {
+    text-align: center !important;
 }
 
 .score-row {
@@ -517,11 +592,28 @@ body.study-shell ::selection {
 }
 
 .fine-summary {
+    position: relative;
     border-top: 1px solid var(--faint) !important;
     background: var(--panel-bg) !important;
-    padding: 12px 14px !important;
+    padding: 14px !important;
+    display: flex !important;
+    flex-direction: column;
     justify-content: center !important;
+    align-items: center;
+    gap: 12px;
     min-height: 100%;
+}
+
+.fine-summary.is-zero .fine-amount {
+    color: var(--ink) !important;
+}
+
+.fine-summary.is-positive .fine-amount {
+    color: var(--success) !important;
+}
+
+.fine-summary.is-negative .fine-amount {
+    color: var(--danger) !important;
 }
 
 .fine-summary span {
@@ -531,6 +623,42 @@ body.study-shell ::selection {
 
 .fine-amount {
     font-size: 18px !important;
+}
+
+.fine-paid-button {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 32px;
+    padding: 0 12px;
+    border: 1px solid var(--faint);
+    border-radius: var(--radius) !important;
+    background: var(--panel-bg) !important;
+    color: var(--muted) !important;
+    font-size: 10px !important;
+    font-weight: 500 !important;
+    letter-spacing: 0.04em;
+}
+
+.fine-paid-button.is-paid {
+    border-color: var(--success);
+    background: var(--panel-bg) !important;
+    color: var(--success) !important;
+}
+
+.fine-paid-button.is-overdue {
+    border-color: var(--danger);
+    background: var(--panel-bg) !important;
+    color: var(--danger) !important;
+}
+
+.fine-paid-button.is-open {
+    border-color: var(--faint);
+    background: var(--panel-bg) !important;
+    color: var(--muted) !important;
 }
 
 .text-emerald-600,
