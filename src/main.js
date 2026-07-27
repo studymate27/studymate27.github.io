@@ -107,10 +107,10 @@ function lastPaymentTimeOnOrBefore(targetWeekKey, weeksMap) {
 function computeFineState(targetWeekKey, weeksMap, startWeekKey) {
     let cursor = parseWeekKeyDate(startWeekKey);
     const target = parseWeekKeyDate(targetWeekKey);
-    if (!cursor || !target) return { unpaidFinePoints: 0, settledThroughTarget: false };
+    if (!cursor || !target) return { unsettledPoints: 0, settledThroughTarget: false };
 
     if (hasPaymentAtOrAfter(targetWeekKey, weeksMap)) {
-        return { unpaidFinePoints: 0, settledThroughTarget: true };
+        return { unsettledPoints: 0, settledThroughTarget: true };
     }
 
     const paidThroughTime = lastPaymentTimeOnOrBefore(targetWeekKey, weeksMap);
@@ -129,8 +129,7 @@ function computeFineState(targetWeekKey, weeksMap, startWeekKey) {
         cursor = new Date(cursor);
         cursor.setDate(cursor.getDate() + 7);
     }
-    const points = Math.max(0, -balance);
-    return { unpaidFinePoints: points, settledThroughTarget: points === 0 };
+    return { unsettledPoints: balance, settledThroughTarget: balance === 0 };
 }
 
 function updateBonusLabel() {
@@ -654,13 +653,16 @@ function renderApp() {
         weeksMap[weekKey] = friend; // 이번 주는 화면에 그려지는 최신 friend 객체를 그대로 사용
         const score = computeScoreChain(friend.name, weekKey, weeksMap, startWeekKey);
         const fineState = computeFineState(weekKey, weeksMap, startWeekKey);
-        const unpaidFinePoints = fineState.unpaidFinePoints;
-        const fineAmount = unpaidFinePoints * fineUnit;
+        const fineAmount = fineState.unsettledPoints * fineUnit;
         const finePaid = fineState.settledThroughTarget;
         const currentWeekPaid = isFinePaid(friend);
-        const fineTone = fineAmount > 0 ? "is-negative" : score.final > 0 ? "is-positive" : "is-zero";
-        const fineDisplay = fineAmount > 0 ? `-₩${fineAmount.toLocaleString()}` : `₩${fineAmount.toLocaleString()}`;
-        const paymentTone = finePaid ? "is-paid" : currentWeekEnded && fineAmount > 0 ? "is-overdue" : "is-open";
+        const fineTone = fineAmount < 0 ? "is-negative" : fineAmount > 0 ? "is-positive" : "is-zero";
+        const fineDisplay = fineAmount < 0
+            ? `-₩${Math.abs(fineAmount).toLocaleString()}`
+            : fineAmount > 0
+                ? `+₩${fineAmount.toLocaleString()}`
+                : "₩0";
+        const paymentTone = finePaid ? "is-paid" : currentWeekEnded && fineAmount < 0 ? "is-overdue" : "is-open";
         const paymentDisabled = !currentWeekEnded;
 
         return { friend, dayTargets, dayOffDays, score, fineAmount, fineDisplay, finePaid, currentWeekPaid, fineTone, paymentTone, paymentDisabled };
