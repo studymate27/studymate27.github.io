@@ -115,7 +115,7 @@ function computeFineState(targetWeekKey, weeksMap, startWeekKey) {
 
     const paidThroughTime = lastPaymentTimeOnOrBefore(targetWeekKey, weeksMap);
 
-    let points = 0;
+    let balance = 0;
     let safety = 0;
     while (cursor <= target && safety < 400) {
         safety++;
@@ -123,12 +123,13 @@ function computeFineState(targetWeekKey, weeksMap, startWeekKey) {
         const currentTime = cursor.getTime();
         const row = weeksMap ? weeksMap[wk] : null;
         const raw = computeWeekRaw(row, wk);
-        if ((paidThroughTime === null || currentTime > paidThroughTime) && raw < 0) {
-            points += Math.abs(raw);
+        if (paidThroughTime === null || currentTime > paidThroughTime) {
+            balance += raw;
         }
         cursor = new Date(cursor);
         cursor.setDate(cursor.getDate() + 7);
     }
+    const points = Math.max(0, -balance);
     return { unpaidFinePoints: points, settledThroughTarget: points === 0 };
 }
 
