@@ -207,7 +207,7 @@ async function editFineUnit() {
 
 function updateDDays() {
     const now = new Date();
-    const mopyungDate = new Date(2026, 8, 3);  // 9월 3일 (month는 0-indexed)
+    const mopyungDate = new Date(2026, 8, 2);  // 9월 2일 (month는 0-indexed)
     const suneungDate = new Date(2026, 10, 19); // 11월 19일
     document.getElementById('mopyung-dday').innerText = formatDday(getDday(mopyungDate, now));
     document.getElementById('suneung-dday').innerText = formatDday(getDday(suneungDate, now));
@@ -598,9 +598,9 @@ async function editSelectedDaysTarget(friendId) {
 
     const currentMonday = parseDateKey(currentWeekDates[0].storageKey);
 
-    // 마스터 리스트(앞으로 새로 생길 주차용) + 오늘 이후 이미 만들어진 모든 주차
+    // 마스터 리스트(앞으로 새로 생길 주차용) + 현재 보고 있는 주차 이후 이미 만들어진 모든 주차
     const targets = (allRows || []).filter(r => {
-                if (r.week_key === MASTER_WEEK_KEY) return true;
+        if (r.week_key === MASTER_WEEK_KEY) return true;
         const rowMonday = parseWeekKeyDate(r.week_key);
         return rowMonday && rowMonday >= currentMonday;
     });
@@ -632,8 +632,10 @@ function renderApp() {
     const weekKey = getWeekStorageKey();
     const today = new Date();
     today.setHours(0,0,0,0);
+    const now = new Date();
     const currentWeekEnd = parseDateKey(currentWeekDates[6].storageKey);
-    const currentWeekEnded = currentWeekEnd < today;
+    currentWeekEnd.setHours(18, 0, 0, 0);
+    const currentWeekEnded = currentWeekEnd <= now;
 
     const orderedData = applyLocalOrder(serverData);
     const viewRows = orderedData.map(friend => {
@@ -888,9 +890,8 @@ async function toggleCheck(id, index, listName, currentVal) {
 
 async function toggleFinePaid(id) {
     const currentWeekEnd = parseDateKey(currentWeekDates[6].storageKey);
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    if (currentWeekEnd >= today) return;
+    currentWeekEnd.setHours(18, 0, 0, 0);
+    if (currentWeekEnd > new Date()) return;
 
     const friend = serverData.find(f => f.id === id);
     if (!friend) return;
