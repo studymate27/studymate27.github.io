@@ -207,9 +207,7 @@ async function editFineUnit() {
 
 function updateDDays() {
     const now = new Date();
-    const mopyungDate = new Date(2026, 8, 2);  // 9월 2일 (month는 0-indexed)
     const suneungDate = new Date(2026, 10, 19); // 11월 19일
-    document.getElementById('mopyung-dday').innerText = formatDday(getDday(mopyungDate, now));
     document.getElementById('suneung-dday').innerText = formatDday(getDday(suneungDate, now));
 }
 
