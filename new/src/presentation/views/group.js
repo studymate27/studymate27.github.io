@@ -3,6 +3,7 @@ import { upcomingDdays } from "../../application/groups.js";
 import * as repo from "../../infrastructure/groups-repo.js";
 import { escapeHtml, render } from "../dom.js";
 import { bindInvitePanel, invitePanel } from "./groups.js";
+import { weekTab } from "./week.js";
 
 const TABS = [
     ["week", "주간"],
@@ -36,7 +37,7 @@ function manageTab(body, { group, members, me }) {
             <h3 class="auth-subtitle">멤버 ${members.length}명</h3>
             <ul class="member-list">${members.map(m => `
                 <li>
-                    <span>${escapeHtml(m.nickname)}${m.user_id === me ? ` <span class="auth-note">(나)</span>` : ""}</span>
+                    <span>${escapeHtml(m.nickname)}${m.user_id === me.userId ? ` <span class="auth-note">(나)</span>` : ""}</span>
                     ${m.role === "admin" ? `<span class="role-badge">방장</span>` : ""}
                 </li>`).join("")}
             </ul>
@@ -64,10 +65,12 @@ export async function groupView(container, { session, params, flash }) {
                 <div data-tab></div>
             </section>`);
         const body = $page("[data-tab]");
-        const context = { group, members, me: session.user.id };
+        const myRole = members.find(m => m.user_id === session.user.id)?.role ?? "member";
+        const context = { group, members, me: { userId: session.user.id, role: myRole } };
 
         if (params.tab === "manage") manageTab(body, context);
-        else body.innerHTML = `<p class="auth-note coming-soon">${params.tab === "week" ? "주간 장부" : "월간 현황"}는 곧 열려요.</p>`;
+        else if (params.tab === "week") await weekTab(body, context);
+        else body.innerHTML = `<p class="auth-note coming-soon">월간 현황은 곧 열려요.</p>`;
     } catch (error) {
         $("p").textContent = errorMessage(error);
     }
