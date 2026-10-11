@@ -9,7 +9,10 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "coverage": "vitest run --coverage"
+    "coverage": "vitest run --coverage",
+    "test:db": "vitest run --config vitest.db.config.js",
+    "db:start": "supabase start -x studio,imgproxy,storage-api,edge-runtime,logflare,vector,realtime,postgres-meta,supavisor",
+    "db:reset": "supabase db reset"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.109.0"
@@ -17,8 +20,10 @@
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.3",
     "@vitest/coverage-v8": "^4.1.11",
+    "supabase": "^2.120.0",
     "tailwindcss": "^4.3.3",
     "vite": "^8.3.4",
-    "vitest": "^4.1.11"
+    "vitest": "^4.1.11",
+    "ws": "^8.22.0"
   }
 }

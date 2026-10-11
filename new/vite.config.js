@@ -5,7 +5,7 @@ export default defineConfig({
     base: "/app/",
     plugins: [tailwindcss()],
     test: {
-        include: ["tests/**/*.test.js"],
+        include: ["tests/unit/**/*.test.js"],
         coverage: {
             include: ["src/domain/**"],
         },

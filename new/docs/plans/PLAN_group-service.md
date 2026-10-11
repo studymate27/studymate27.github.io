@@ -1,6 +1,6 @@
 # 구현 계획: STUDY MATE 그룹 서비스
 
-**상태**: 🔄 진행 중 (0단계 커밋 대기, 1단계 완료)
+**상태**: 🔄 진행 중 (2단계 원격 적용 대기, 3단계)
 **작성일**: 2026-10-11
 **최종 수정**: 2026-10-11
 **참고 문서**: [요구사항](../PLAN.md) · [화면 구조](../IA.md)
@@ -76,7 +76,7 @@
 - [x] **새 Supabase 프로젝트 생성** → URL·publishable key 전달 (2026-10-11 완료)
 - [ ] **Google Cloud Console에서 OAuth 클라이언트 생성** → Supabase Auth에 등록 (3단계 전)
 - [ ] **메일 발송 서비스(SMTP) 연결** (전용 도메인이 없으므로 Gmail SMTP + 앱 비밀번호) – Supabase 기본 메일은 발송량이 매우 적은 테스트용. 실사용자 받기 전 필수
-- [ ] **GitHub 레포 설정 → Pages → Source를 "GitHub Actions"로 변경** (0단계 배포 시)
+- [x] **GitHub 레포 설정 → Pages → Source를 "GitHub Actions"로 변경** (0단계 배포 시)
 
 ### 외부 패키지
 - vite, @tailwindcss/vite, tailwindcss v4
@@ -116,7 +116,7 @@ new/
 
 ### 0단계: 기반 공사
 **목표**: `new/`가 Vite로 실행·빌드되고, 운영 사이트를 깨지 않는 배포 구성이 준비된다.
-**상태**: 🔄 커밋·배포 대기
+**상태**: ✅
 
 **작업**
 - [x] 0.1 `new/`에 Vite 프로젝트 구성 (`package.json`, `vite.config.js`의 `base: '/app/'`)
@@ -125,13 +125,13 @@ new/
 - [x] 0.4 Vitest 설정 + 예시 테스트 1개
 - [x] 0.5 GitHub Actions 워크플로: `legacy/` → 사이트 루트, `new/` 빌드 결과 → `/app/`
 - [x] 0.6 로컬에서 워크플로와 같은 결과물 폴더를 만들어 legacy 경로(`/index.html`, `/src/...`, `/favicon.svg`)가 그대로인지 확인
-- [ ] 0.7 위 확인 후에만 `legacy/` 이동 + `new/` 커밋 (push는 사용자 확인 후)
+- [x] 0.7 위 확인 후에만 `legacy/` 이동 + `new/` 커밋 (push는 사용자 확인 후)
 
 **품질 게이트**
 - [x] `npm run build` 성공, `npm test` 통과
 - [x] `new/` 코드 어디에도 legacy Supabase URL·key가 없음 (`grep jgmrktikgxtivsedsvmz` 결과 없음)
-- [ ] 배포 후 기존 주소에서 legacy 사이트가 그대로 동작
-- [ ] `/app/`에서 빈 앱이 열림
+- [x] 배포 후 기존 주소에서 legacy 사이트가 그대로 동작
+- [x] `/app/`에서 빈 앱이 열림
 
 **되돌리기**: 워크플로 파일 삭제 + Pages Source를 브랜치 배포로 복구, `git mv legacy/* .`로 원위치
 
@@ -175,10 +175,10 @@ new/
 
 ### 2단계: DB 스키마 + 권한 규칙
 **목표**: 새 Supabase 프로젝트에 테이블·RLS·RPC가 올라가고, 권한이 DB에서 강제된다.
-**상태**: ⏳ | **선행 조건**: 새 Supabase 프로젝트 준비
+**상태**: 🔄 원격 적용 대기 | **선행 조건**: 새 Supabase 프로젝트 준비
 
 **🔴 RED – 정책 테스트 먼저** (`supabase/tests/`)
-- [ ] 2.1 테스트 계정 A(방장), B(멤버), C(외부인) 시나리오
+- [x] 2.1 테스트 계정 A(방장), B(멤버), C(외부인) 시나리오
   - C는 그룹 데이터를 조회할 수 없다
   - 자율 모드: B는 자기 `daily_records`만 수정 가능, A의 기록 수정은 거부
   - 방장 관리 모드: B의 모든 기록 수정 거부
@@ -188,19 +188,20 @@ new/
   - 잘못된 초대 코드로 `join_group` 실패, 재발급 후 옛 코드 실패
 
 **🟢 GREEN – 마이그레이션**
-- [ ] 2.2 테이블: `profiles`, `groups`, `group_ddays`, `group_members`, `member_day_targets`, `daily_records`, `fine_payments` (설계는 [PLAN.md §4](../PLAN.md))
-- [ ] 2.3 가입 시 `profiles` 자동 생성 트리거
-- [ ] 2.4 `security definer` 헬퍼: `is_member(gid)`, `is_admin(gid)`, `can_edit_member(gid, uid)`
-- [ ] 2.5 RLS 정책 (헬퍼 사용 → `group_members` 자기 참조 재귀 방지)
-- [ ] 2.6 RPC: `create_group`, `join_group`, `regenerate_invite_code`, `set_member_role`, `transfer_admin`, `leave_group`, `remove_member`
-- [ ] 2.7 제약: 디데이 최대 3개, 방장 최소 1명 (트리거)
+- [x] 2.2 테이블: `profiles`, `groups`, `group_ddays`, `group_members`, `member_day_targets`, `daily_records`, `fine_payments` (설계는 [PLAN.md §4](../PLAN.md))
+- [x] 2.3 가입 시 `profiles` 자동 생성 트리거
+- [x] 2.4 `security definer` 헬퍼: `is_member(gid)`, `is_admin(gid)`, `can_edit_member(gid, uid)`
+- [x] 2.5 RLS 정책 (헬퍼 사용 → `group_members` 자기 참조 재귀 방지)
+- [x] 2.6 RPC: `create_group`, `join_group`, `regenerate_invite_code`, `set_member_role`, `transfer_admin`, `leave_group`, `remove_member`
+- [x] 2.7 제약: 디데이 최대 3개, 방장 최소 1명 (트리거)
 
 **🔵 REFACTOR**
-- [ ] 2.8 정책 이름·주석 정리, 인덱스 (`daily_records(group_id, date)`)
+- [x] 2.8 정책 이름·주석 정리, 인덱스 (`daily_records(group_id, date)`)
 
 **품질 게이트**
-- [ ] 2.1 시나리오 전부 기대대로 통과/거부
-- [ ] 마이그레이션을 빈 DB에 처음부터 다시 적용해도 성공
+- [x] 2.1 시나리오 전부 기대대로 통과/거부
+- [x] 마이그레이션을 빈 DB에 처음부터 다시 적용해도 성공 (로컬 `supabase db reset`)
+- [ ] 원격 프로젝트(`fkwqaedrqtaohreiweco`)에 적용 – `supabase login` 필요
 
 **되돌리기**: 새 프로젝트이므로 마이그레이션 down 또는 DB 리셋 (legacy DB와 무관)
 
@@ -316,9 +317,9 @@ new/
 
 | 단계 | 상태 |
 |---|---|
-| 0. 기반 공사 | 🔄 커밋·배포 대기 |
+| 0. 기반 공사 | ✅ |
 | 1. 계산 로직 정리 | ✅ |
-| 2. DB 스키마 + 권한 | ⏳ |
+| 2. DB 스키마 + 권한 | 🔄 원격 적용 대기 |
 | 3. 로그인 | ⏳ |
 | 4. 그룹 목록·생성·초대 | ⏳ |
 | 5. 주간 장부 이식 | ⏳ |
@@ -337,4 +338,11 @@ new/
 - **`new/`의 legacy UI 복사본 삭제**: `main.js`·`pickers.js`·`local-storage.js`는 5단계에서 `legacy/`를 보고 새 구조로 옮김.
 - **계산 로직 API 변경**: `computeWeekRaw/ScoreChain/FineState`가 `{ today, bonusEnabled, paidWeekKeys }` 옵션을 받음. `computeScoreChain`의 쓰이지 않던 `name` 인자는 제거.
 - **legacy 비교 테스트**: 무작위 멤버 200명 × 14주 기록으로 새 함수와 legacy 함수의 결과가 일치하는지 확인함 (`tests/unit/legacy-parity.test.js`). legacy 벌금 로직은 `tests/fixtures/legacy-fines.js`에 원본 그대로 복사해 둠.
+- **배포 확인 (커밋 `7af6333`)**: Pages를 API로 `build_type=workflow`로 전환 후 push. 배포본의 legacy 파일이 `legacy/`와 동일, `/app/` 번들에 새 Supabase ref만 들어 있음 확인.
+- **2단계 DB**: `supabase/migrations/20261011000000_group_service.sql`. 로컬 Supabase(Docker)로 개발·검증. 권한 테스트 35개(`npm run test:db`, 로컬 DB 필요 – CI에서는 안 돌림). 권한 함수를 일부러 느슨하게 바꾸면 테스트가 실패하는 것도 확인.
+  - 오류는 영문 키(`not_admin`, `last_admin`, `dday_limit`, `invalid_invite_code` …)로 던짐 → 화면에서 한글 안내로 바꿀 것.
+  - `profiles`(이메일)는 본인만 조회. 그룹 안에서는 `group_members.nickname`만 노출.
+  - 멤버가 나가거나 내보내져도 `daily_records`는 그룹에 남음. 마지막 멤버가 나가면 그룹 삭제.
+  - `daily_records`는 PostgREST upsert 때문에 컬럼 제한 없이 UPDATE 권한을 줌 (`updated_by`는 트리거가 덮어씀).
+  - Node 20에서 supabase-js가 WebSocket을 요구해서 DB 테스트에 `ws`를 넣음.
 - **점수 부호**: 음수 = 벌점(낼 벌금), 양수 = 상점 잔액. 주간 이월은 양수만 넘어감.
