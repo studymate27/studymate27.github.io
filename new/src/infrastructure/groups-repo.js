@@ -40,7 +40,7 @@ export async function previewInvite(code) {
 export async function getGroup(groupId) {
     return call(
         supabase.from("groups")
-            .select("*, group_ddays(label, target_date, sort_order)")
+            .select("*, group_ddays(id, label, target_date, sort_order)")
             .eq("id", groupId)
             .maybeSingle(),
     );
@@ -54,3 +54,29 @@ export async function getMembers(groupId) {
             .order("sort_order", { ascending: true }),
     );
 }
+
+// ── 관리 ──
+
+export const updateGroup = (groupId, fields) =>
+    call(supabase.from("groups").update(fields).eq("id", groupId).select("id").single());
+
+export const addDday = (groupId, label, targetDate) =>
+    call(supabase.from("group_ddays").insert({ group_id: groupId, label, target_date: targetDate }));
+
+export const deleteDday = ddayId => call(supabase.from("group_ddays").delete().eq("id", ddayId));
+
+export const updateNickname = (groupId, userId, nickname) =>
+    call(supabase.from("group_members").update({ nickname }).match({ group_id: groupId, user_id: userId }).select("user_id").single());
+
+export const setMemberRole = (groupId, userId, role) =>
+    call(supabase.rpc("set_member_role", { gid: groupId, target: userId, new_role: role }));
+
+export const transferAdmin = (groupId, userId) => call(supabase.rpc("transfer_admin", { gid: groupId, target: userId }));
+
+export const removeMember = (groupId, userId) => call(supabase.rpc("remove_member", { gid: groupId, target: userId }));
+
+export const leaveGroup = groupId => call(supabase.rpc("leave_group", { gid: groupId }));
+
+export const regenerateInviteCode = groupId => call(supabase.rpc("regenerate_invite_code", { gid: groupId }));
+
+export const reorderMembers = (groupId, userIds) => call(supabase.rpc("reorder_members", { gid: groupId, user_ids: userIds }));

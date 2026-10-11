@@ -2,7 +2,9 @@ import { errorMessage } from "../../application/errors.js";
 import { upcomingDdays } from "../../application/groups.js";
 import * as repo from "../../infrastructure/groups-repo.js";
 import { escapeHtml, render } from "../dom.js";
-import { bindInvitePanel, invitePanel } from "./groups.js";
+import { showToast } from "../toast.js";
+import { manageTab } from "./manage.js";
+import { monthTab } from "./month.js";
 import { weekTab } from "./week.js";
 
 const TABS = [
@@ -27,25 +29,7 @@ function groupHeader(group, tab) {
         </header>`;
 }
 
-function manageTab(body, { group, members, me }) {
-    const $ = render(body, `
-        <section class="manage-section">
-            <h3 class="auth-subtitle">친구 초대</h3>
-            ${invitePanel(group.invite_code)}
-        </section>
-        <section class="manage-section">
-            <h3 class="auth-subtitle">멤버 ${members.length}명</h3>
-            <ul class="member-list">${members.map(m => `
-                <li>
-                    <span>${escapeHtml(m.nickname)}${m.user_id === me.userId ? ` <span class="auth-note">(나)</span>` : ""}</span>
-                    ${m.role === "admin" ? `<span class="role-badge">방장</span>` : ""}
-                </li>`).join("")}
-            </ul>
-        </section>`);
-    bindInvitePanel($, group.invite_code);
-}
-
-export async function groupView(container, { session, params, flash }) {
+export async function groupView(container, { session, params, flash, navigate }) {
     const $ = render(container, `<p class="auth-note">불러오는 중...</p>`);
     try {
         const [group, members] = await Promise.all([repo.getGroup(params.id), repo.getMembers(params.id)]);
@@ -66,11 +50,16 @@ export async function groupView(container, { session, params, flash }) {
             </section>`);
         const body = $page("[data-tab]");
         const myRole = members.find(m => m.user_id === session.user.id)?.role ?? "member";
-        const context = { group, members, me: { userId: session.user.id, role: myRole } };
+        // 관리 탭에서 바꾼 뒤 그룹 정보를 다시 불러와 그린다 (스크롤 위치 유지)
+        const refresh = async message => {
+            await groupView(container, { session, params, flash: "", navigate });
+            if (message) showToast(message);
+        };
+        const context = { group, members, me: { userId: session.user.id, role: myRole }, refresh, navigate };
 
         if (params.tab === "manage") manageTab(body, context);
         else if (params.tab === "week") await weekTab(body, context);
-        else body.innerHTML = `<p class="auth-note coming-soon">월간 현황은 곧 열려요.</p>`;
+        else await monthTab(body, context);
     } catch (error) {
         $("p").textContent = errorMessage(error);
     }

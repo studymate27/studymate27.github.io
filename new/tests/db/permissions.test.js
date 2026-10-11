@@ -286,3 +286,26 @@ describe("방장 지정·양도·탈퇴", () => {
         expect(data).toEqual([]);
     });
 });
+
+describe("회원 탈퇴", () => {
+    it("혼자인 그룹은 함께 지워지고 계정이 삭제된다", async () => {
+        const D = await makeUser("d");
+        const solo = ok(await rpc(D, "create_group", { p_name: "혼자", p_nickname: "디" }));
+        ok(await rpc(D, "delete_my_account", {}));
+        expect(ok(await admin.from("groups").select("id").eq("id", solo))).toEqual([]);
+        expect((await admin.auth.admin.getUserById(D.id)).data.user).toBeNull();
+    });
+
+    it("다른 멤버가 있는 그룹의 유일한 방장은 탈퇴할 수 없다", async () => {
+        const E = await makeUser("e");
+        const F = await makeUser("f");
+        const g = ok(await rpc(E, "create_group", { p_name: "둘", p_nickname: "이" }));
+        const c = ok(await E.client.from("groups").select("invite_code").eq("id", g).single()).invite_code;
+        ok(await rpc(F, "join_group", { p_code: c, p_nickname: "에프" }));
+        expect((await rpc(E, "delete_my_account", {})).error.message).toBe("last_admin");
+
+        // 멤버는 탈퇴 가능, 그룹과 방장은 남는다
+        ok(await rpc(F, "delete_my_account", {}));
+        expect(ok(await E.client.from("group_members").select("user_id").eq("group_id", g))).toEqual([{ user_id: E.id }]);
+    });
+});

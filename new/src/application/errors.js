@@ -31,7 +31,8 @@ export function errorMessage(error) {
     if (!error) return FALLBACK;
     if (error.userMessage) return error.userMessage;
     const message = String(error.message ?? "");
-    if (error.code === "42501") return "수정 권한이 없어요.";
+    // 42501: 권한 거부, PGRST116: RLS로 걸러져 바뀐 행이 없음
+    if (error.code === "42501" || error.code === "PGRST116") return "수정 권한이 없어요.";
     if (EXACT[message]) return EXACT[message];
     for (const [pattern, toText] of PATTERNS) {
         const match = message.match(pattern);

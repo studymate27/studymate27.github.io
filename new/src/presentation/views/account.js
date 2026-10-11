@@ -1,6 +1,7 @@
 import * as auth from "../../application/auth.js";
 import { errorMessage } from "../../application/errors.js";
 import { escapeHtml, handleSubmit, render } from "../dom.js";
+import { confirmModal } from "../modals.js";
 
 export function accountView(container, { session, flash }) {
     const user = session.user;
@@ -23,6 +24,10 @@ export function accountView(container, { session, flash }) {
             </form>` : ""}
             <button type="button" class="auth-button" data-logout>로그아웃</button>
             <nav class="auth-links"><a href="#/groups">내 그룹으로</a></nav>
+            <div class="danger-zone">
+                <p class="auth-error" data-delete-error role="alert"></p>
+                <button type="button" class="text-button is-danger" data-delete>회원 탈퇴</button>
+            </div>
         </section>`);
 
     if (canChangePassword) {
@@ -39,4 +44,15 @@ export function accountView(container, { session, flash }) {
         });
     }
     $("[data-logout]").addEventListener("click", () => auth.signOut());
+    $("[data-delete]").addEventListener("click", async () => {
+        const ok = await confirmModal("회원 탈퇴",
+            "계정과 내 기록이 모두 지워지고 되돌릴 수 없어요. 혼자 있는 그룹도 함께 삭제돼요. 내가 유일한 방장인 그룹이 있으면 먼저 다른 멤버를 방장으로 지정해 주세요.",
+            "탈퇴하기");
+        if (!ok) return;
+        try {
+            await auth.deleteAccount();
+        } catch (error) {
+            $("[data-delete-error]").textContent = errorMessage(error);
+        }
+    });
 }

@@ -6,7 +6,7 @@ const DAY_LABELS = ["월", "화", "수", "목", "금", "토", "일"];
 /**
  * 확인/취소 모달. 확인하면 read(panel)의 결과, 취소·바깥 클릭·Esc면 null.
  */
-export function openModal({ title, body, read, onOpen }) {
+export function openModal({ title, body, read, onOpen, okLabel = "확인" }) {
     return new Promise(resolve => {
         const modal = document.createElement("div");
         modal.className = "study-modal";
@@ -16,7 +16,7 @@ export function openModal({ title, body, read, onOpen }) {
                 ${body}
                 <div class="modal-actions">
                     <button type="button" class="study-modal-button" data-cancel>취소</button>
-                    <button type="button" class="study-modal-button is-primary" data-ok>확인</button>
+                    <button type="button" class="study-modal-button is-primary" data-ok>${escapeHtml(okLabel)}</button>
                 </div>
             </div>`;
         const panel = modal.firstElementChild;
@@ -68,4 +68,13 @@ export function pickDayTargets(targets) {
         }),
         read: panel => [...panel.querySelectorAll("[data-target]")].map(input => normalizeTimeText(input.value)),
     });
+}
+
+export function confirmModal(title, message, okLabel = "확인") {
+    return openModal({
+        title,
+        body: `<p class="modal-message">${escapeHtml(message)}</p>`,
+        okLabel,
+        read: () => true,
+    }).then(Boolean);
 }

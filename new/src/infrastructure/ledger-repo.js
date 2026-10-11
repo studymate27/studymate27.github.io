@@ -8,14 +8,16 @@ async function call(promise) {
     return data;
 }
 
-async function fetchAllRecords(groupId, untilKey) {
+async function fetchAllRecords(groupId, untilKey, sinceKey = null) {
     const rows = [];
     for (let from = 0; ; from += PAGE) {
+        let query = supabase.from("daily_records")
+            .select("user_id, date, study_done, start_done, bonus_done, is_day_off")
+            .eq("group_id", groupId)
+            .lte("date", untilKey);
+        if (sinceKey) query = query.gte("date", sinceKey);
         const page = await call(
-            supabase.from("daily_records")
-                .select("user_id, date, study_done, start_done, bonus_done, is_day_off")
-                .eq("group_id", groupId)
-                .lte("date", untilKey)
+            query
                 .order("date", { ascending: true })
                 .order("user_id", { ascending: true })
                 .range(from, from + PAGE - 1),
@@ -33,6 +35,15 @@ export async function loadLedgerData(groupId, sundayKey) {
         call(supabase.from("member_day_targets").select("user_id, weekday, start_time").eq("group_id", groupId)),
     ]);
     return { records, payments, targets };
+}
+
+/** 월간 현황: 그 달 기록과 납부 기록 */
+export async function loadMonthData(groupId, firstKey, lastKey) {
+    const [records, payments] = await Promise.all([
+        fetchAllRecords(groupId, lastKey, firstKey),
+        call(supabase.from("fine_payments").select("user_id, settled_through_week").eq("group_id", groupId)),
+    ]);
+    return { records, payments };
 }
 
 export const setDayValue = (groupId, userId, dateKey, field, value) =>

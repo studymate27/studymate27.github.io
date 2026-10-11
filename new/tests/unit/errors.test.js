@@ -25,6 +25,11 @@ describe("errorMessage", () => {
             .toBe("수정 권한이 없어요.");
     });
 
+    it("RLS로 걸러져 바뀐 행이 없을 때도 권한 안내로", () => {
+        expect(errorMessage({ code: "PGRST116", message: "Cannot coerce the result to a single JSON object" }))
+            .toBe("수정 권한이 없어요.");
+    });
+
     it("모르는 오류는 원문과 함께 일반 안내", () => {
         expect(errorMessage({ message: "boom" })).toBe("문제가 생겼어요. 잠시 후 다시 시도해 주세요. (boom)");
         expect(errorMessage(null)).toBe("문제가 생겼어요. 잠시 후 다시 시도해 주세요.");

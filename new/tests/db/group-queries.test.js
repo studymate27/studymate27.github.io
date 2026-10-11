@@ -64,3 +64,20 @@ describe("그룹 화면 조회", () => {
         expect(ok(await B.client.from("groups").select("id").eq("id", preview.group_id).maybeSingle())).toEqual({ id: g1 });
     });
 });
+
+describe("관리 탭 저장", () => {
+    it("방장이 아닌 사람이 설정을 저장하면 PGRST116(바뀐 행 없음)으로 실패한다", async () => {
+        const { error } = await B.client.from("groups").update({ fine_unit: 1 }).eq("id", g1).select("id").single();
+        expect(error.code).toBe("PGRST116");
+    });
+
+    it("방장은 설정을 저장하고 결과 행을 받는다", async () => {
+        expect(ok(await A.client.from("groups").update({ fine_unit: 900, default_start_time: "07:30" }).eq("id", g1).select("id").single())).toEqual({ id: g1 });
+    });
+
+    it("디데이 id로 삭제할 수 있다", async () => {
+        const [d] = ok(await A.client.from("group_ddays").select("id").eq("group_id", g1));
+        ok(await A.client.from("group_ddays").delete().eq("id", d.id));
+        expect(ok(await A.client.from("group_ddays").select("id").eq("group_id", g1))).toEqual([]);
+    });
+});

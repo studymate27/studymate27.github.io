@@ -32,6 +32,12 @@ export const signInWithGoogle = () =>
 
 export const signOut = () => call(supabase.auth.signOut());
 
+export async function deleteAccount() {
+    await call(supabase.rpc("delete_my_account"));
+    // 서버에서 계정이 지워졌으므로 이 기기의 세션만 정리
+    await supabase.auth.signOut({ scope: "local" });
+}
+
 export const onAuthChange = callback => supabase.auth.onAuthStateChange(callback);
 
 // 이메일+비밀번호로 가입한 계정인지 (구글 전용 계정은 비밀번호 변경 불가)
