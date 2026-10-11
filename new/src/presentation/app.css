@@ -210,3 +210,203 @@
     color: var(--ink);
     word-break: break-all;
 }
+
+/* ── 그룹 목록·그룹 화면 ── */
+
+.page-panel {
+    width: min(100%, 560px);
+    margin: 8px auto 0;
+    display: grid;
+    gap: 16px;
+}
+
+.page-panel.is-wide {
+    width: 100%;
+}
+
+.group-list,
+.member-list,
+.dday-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.group-list {
+    display: grid;
+    gap: 8px;
+}
+
+.group-card {
+    display: grid;
+    gap: 6px;
+    padding: 16px;
+    border: 1px solid var(--faint);
+    border-radius: var(--radius);
+    color: var(--ink);
+    text-decoration: none;
+    transition: border-color 120ms ease, background 120ms ease;
+}
+
+.group-card:hover {
+    border-color: var(--ink);
+    background: var(--hover-bg);
+}
+
+.group-name {
+    font-size: 15px;
+    font-weight: 600;
+}
+
+.group-meta {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--muted);
+    font-size: 12px;
+}
+
+.role-badge {
+    display: inline-flex;
+    padding: 2px 6px;
+    border: 1px solid var(--ink);
+    border-radius: 4px;
+    color: var(--ink);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+}
+
+.group-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+}
+
+.group-form {
+    padding: 16px;
+    border: 1px solid var(--grid);
+    border-radius: var(--radius);
+}
+
+.empty-state {
+    display: grid;
+    gap: 6px;
+    padding: 28px 16px;
+    border: 1px dashed var(--faint);
+    border-radius: var(--radius);
+    text-align: center;
+}
+
+.group-head {
+    display: grid;
+    gap: 12px;
+}
+
+.group-back {
+    color: var(--muted);
+    font-size: 12px;
+    text-decoration: none;
+}
+
+.group-back:hover {
+    color: var(--ink);
+}
+
+.group-title {
+    color: var(--ink);
+    font-size: 20px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    word-break: break-all;
+}
+
+.dday-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.group-tabs {
+    display: flex;
+    border-bottom: 1px solid var(--faint);
+}
+
+.group-tab {
+    flex: 1;
+    padding: 10px 0;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+    color: var(--muted);
+    font-size: 13px;
+    font-weight: 600;
+    text-align: center;
+    text-decoration: none;
+}
+
+.group-tab.is-active {
+    border-bottom-color: var(--ink);
+    color: var(--ink);
+}
+
+.coming-soon {
+    padding: 48px 0;
+    text-align: center;
+}
+
+.manage-section {
+    display: grid;
+    gap: 10px;
+    padding: 16px 0;
+    border-bottom: 1px solid var(--grid);
+}
+
+.invite-box {
+    display: grid;
+    gap: 8px;
+    padding: 14px;
+    border: 1px solid var(--faint);
+    border-radius: var(--radius);
+    background: var(--soft-bg);
+}
+
+.invite-label {
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 600;
+}
+
+.invite-link {
+    color: var(--ink);
+    font-size: 13px;
+    word-break: break-all;
+    user-select: all;
+}
+
+.invite-code {
+    color: var(--muted);
+    font-size: 12px;
+}
+
+.invite-code strong {
+    color: var(--ink);
+    letter-spacing: 0.12em;
+}
+
+.member-list {
+    display: grid;
+}
+
+.member-list li {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--grid);
+    font-size: 14px;
+}
+
+.member-list li:last-child {
+    border-bottom: 0;
+}

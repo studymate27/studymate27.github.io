@@ -5,7 +5,8 @@ import { supabase } from "./infrastructure/supabase-client.js";
 import { escapeHtml } from "./presentation/dom.js";
 import { accountView } from "./presentation/views/account.js";
 import { forgotView, loginView, resetView, signupView } from "./presentation/views/auth.js";
-import { groupsView, notFoundView } from "./presentation/views/groups.js";
+import { groupView } from "./presentation/views/group.js";
+import { groupsView, joinView, notFoundView } from "./presentation/views/groups.js";
 
 const RETURN_TO_KEY = "studymate:returnTo";
 const container = document.getElementById("app");
@@ -21,9 +22,8 @@ const views = {
     reset: resetView,
     groups: groupsView,
     account: accountView,
-    // 4~6단계에서 채움
-    join: groupsView,
-    group: groupsView,
+    join: joinView,
+    group: groupView,
     notFound: notFoundView,
 };
 
