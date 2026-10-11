@@ -13,23 +13,23 @@
 </head>
 <body class="study-shell">
     <header class="study-header">
-        <div class="study-header-inner">
+        <div class="study-header-inner app-header-inner">
             <div class="study-brand">
                 <div class="study-logo">
                     <i class="fa-solid fa-graduation-cap text-xl"></i>
                 </div>
-                <div>
+                <a href="#/" class="study-title-link">
                     <h1 class="study-title">Study Mate</h1>
-                    <p class="study-subtitle"></p>
-                </div>
+                </a>
             </div>
+            <a id="account-link" href="#/account" class="study-chip-button hidden" aria-label="내 계정">
+                <i class="fa-solid fa-user"></i><span>내 계정</span>
+            </a>
         </div>
     </header>
 
     <main id="app" class="study-main">
-        <p class="text-sm text-slate-500 text-center py-16">
-            새 서비스 준비 중 · <span id="app-status">연결 확인 중...</span>
-        </p>
+        <p class="auth-lead">불러오는 중...</p>
     </main>
 
     <script type="module" src="/src/app.js"></script>

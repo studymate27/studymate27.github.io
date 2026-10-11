@@ -7,6 +7,9 @@ export function createSupabaseClient() {
         return null;
     }
     return createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+        // 메일 링크·구글 로그인이 ?code= 로 돌아오게 해서 해시 라우터(#/...)와 겹치지 않게 한다
         auth: { flowType: "pkce" },
     });
 }
+
+export const supabase = createSupabaseClient();
