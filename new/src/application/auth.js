@@ -1,9 +1,13 @@
 import { supabase } from "../infrastructure/supabase-client.js";
+import { returnTo } from "./return-to.js";
 
 // 메일·구글 로그인 후 돌아올 주소 (예: https://studymate27.github.io/app/#/groups)
 export function appUrl(hash) {
     return `${window.location.origin}${import.meta.env.BASE_URL}${hash}`;
 }
+
+// 로그인 후 돌아갈 곳: 기억해 둔 주소(초대 링크 등)가 있으면 그곳, 없으면 그룹 목록
+const afterLogin = () => appUrl(returnTo.get() ?? "#/groups");
 
 async function call(promise) {
     const { data, error } = await promise;
@@ -17,10 +21,10 @@ export const signIn = (email, password) =>
     call(supabase.auth.signInWithPassword({ email, password }));
 
 export const signUp = (email, password) =>
-    call(supabase.auth.signUp({ email, password, options: { emailRedirectTo: appUrl("#/groups") } }));
+    call(supabase.auth.signUp({ email, password, options: { emailRedirectTo: afterLogin() } }));
 
 export const resendSignupEmail = email =>
-    call(supabase.auth.resend({ type: "signup", email, options: { emailRedirectTo: appUrl("#/groups") } }));
+    call(supabase.auth.resend({ type: "signup", email, options: { emailRedirectTo: afterLogin() } }));
 
 export const sendPasswordReset = email =>
     call(supabase.auth.resetPasswordForEmail(email, { redirectTo: appUrl("#/reset") }));
@@ -28,7 +32,7 @@ export const sendPasswordReset = email =>
 export const updatePassword = password => call(supabase.auth.updateUser({ password }));
 
 export const signInWithGoogle = () =>
-    call(supabase.auth.signInWithOAuth({ provider: "google", options: { redirectTo: appUrl("#/groups") } }));
+    call(supabase.auth.signInWithOAuth({ provider: "google", options: { redirectTo: afterLogin() } }));
 
 export const signOut = () => call(supabase.auth.signOut());
 

@@ -49,6 +49,15 @@ describe("resolveNavigation", () => {
         expect(nav("#/signup", true)).toEqual({ redirect: "#/groups" });
     });
 
+    it("가입·구글 로그인 후 그룹 목록이나 첫 화면에 도착해도 기억해 둔 초대 링크로 보낸다", () => {
+        expect(nav("#/groups", true, "#/join/AB12CD34")).toEqual({ redirect: "#/join/AB12CD34", clearReturnTo: true });
+        expect(nav("#/", true, "#/join/AB12CD34")).toEqual({ redirect: "#/join/AB12CD34", clearReturnTo: true });
+    });
+
+    it("기억해 둔 주소에 이미 와 있으면 지우기만 한다", () => {
+        expect(nav("#/join/AB12CD34", true, "#/join/AB12CD34")).toEqual({ clearReturnTo: true });
+    });
+
     it("로그인 화면·보호된 화면은 그대로 보여준다", () => {
         expect(nav("#/login", false)).toEqual({});
         expect(nav("#/groups", true)).toEqual({});

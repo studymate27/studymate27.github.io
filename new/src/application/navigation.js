@@ -29,12 +29,18 @@ export function parseRoute(hash) {
  * @returns {{redirect?: string, saveReturnTo?: string, clearReturnTo?: boolean}}
  */
 export function resolveNavigation(route, hash, { hasSession, returnTo }) {
+    if (hasSession && returnTo) {
+        // 가입·구글 로그인·메일 인증 후에는 그룹 목록이나 첫 화면에 도착하므로 여기서 원래 주소로 보낸다
+        if (returnTo === hash) return { clearReturnTo: true };
+        if (route.name === "home" || route.name === "groups" || PUBLIC_ONLY.has(route.name)) {
+            return { redirect: returnTo, clearReturnTo: true };
+        }
+    }
     if (route.name === "home") {
         return { redirect: hasSession ? "#/groups" : "#/login" };
     }
     if (PUBLIC_ONLY.has(route.name)) {
-        if (!hasSession) return {};
-        return returnTo ? { redirect: returnTo, clearReturnTo: true } : { redirect: "#/groups" };
+        return hasSession ? { redirect: "#/groups" } : {};
     }
     if (route.name === "reset") {
         return hasSession ? {} : { redirect: "#/forgot" };

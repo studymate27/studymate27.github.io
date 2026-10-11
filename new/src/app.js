@@ -1,6 +1,7 @@
 import "./styles.css";
 import { getSession, onAuthChange } from "./application/auth.js";
 import { parseRoute, resolveNavigation } from "./application/navigation.js";
+import { returnTo } from "./application/return-to.js";
 import { supabase } from "./infrastructure/supabase-client.js";
 import { escapeHtml } from "./presentation/dom.js";
 import { accountView } from "./presentation/views/account.js";
@@ -8,7 +9,6 @@ import { forgotView, loginView, resetView, signupView } from "./presentation/vie
 import { groupView } from "./presentation/views/group.js";
 import { groupsView, joinView, notFoundView } from "./presentation/views/groups.js";
 
-const RETURN_TO_KEY = "studymate:returnTo";
 const container = document.getElementById("app");
 const accountLink = document.getElementById("account-link");
 
@@ -27,17 +27,6 @@ const views = {
     notFound: notFoundView,
 };
 
-function storage(action, value) {
-    try {
-        if (action === "get") return sessionStorage.getItem(RETURN_TO_KEY);
-        if (action === "set") sessionStorage.setItem(RETURN_TO_KEY, value);
-        if (action === "clear") sessionStorage.removeItem(RETURN_TO_KEY);
-    } catch {
-        return null;
-    }
-    return null;
-}
-
 function navigate(hash, message = "") {
     flash = message;
     if (window.location.hash === hash) route();
@@ -47,10 +36,10 @@ function navigate(hash, message = "") {
 function route() {
     const hash = window.location.hash || "#/";
     const current = parseRoute(hash);
-    const decision = resolveNavigation(current, hash, { hasSession: Boolean(session), returnTo: storage("get") });
+    const decision = resolveNavigation(current, hash, { hasSession: Boolean(session), returnTo: returnTo.get() });
 
-    if (decision.saveReturnTo) storage("set", decision.saveReturnTo);
-    if (decision.clearReturnTo) storage("clear");
+    if (decision.saveReturnTo) returnTo.save(decision.saveReturnTo);
+    if (decision.clearReturnTo) returnTo.clear();
     if (decision.redirect) {
         window.location.replace(decision.redirect);
         return;
