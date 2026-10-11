@@ -15,11 +15,14 @@ const accountLink = document.getElementById("account-link");
 let session = null;
 let flash = "";
 
+// 실제 서비스는 구글 로그인만 쓴다. 이메일 가입·비밀번호 화면은 로컬 테스트 서버에서만 연다.
+const emailAuth = import.meta.env.DEV;
+
 const views = {
     login: loginView,
-    signup: signupView,
-    forgot: forgotView,
-    reset: resetView,
+    signup: emailAuth ? signupView : loginView,
+    forgot: emailAuth ? forgotView : loginView,
+    reset: emailAuth ? resetView : loginView,
     groups: groupsView,
     account: accountView,
     join: joinView,

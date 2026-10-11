@@ -1,5 +1,8 @@
 import * as auth from "../../application/auth.js";
 import { errorMessage } from "../../application/errors.js";
+import { detectInAppBrowser, externalOpenUrl } from "../../application/in-app-browser.js";
+import { returnTo } from "../../application/return-to.js";
+import { copyText } from "../clipboard.js";
 import { escapeHtml, handleSubmit, render } from "../dom.js";
 
 const GOOGLE_ICON = `<svg aria-hidden="true" viewBox="0 0 18 18" width="18" height="18"><path fill="#4285F4" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.92c1.7-1.57 2.68-3.88 2.68-6.62z"/><path fill="#34A853" d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.92-2.26c-.8.54-1.83.86-3.04.86-2.34 0-4.32-1.58-5.03-3.7H.96v2.33A9 9 0 0 0 9 18z"/><path fill="#FBBC05" d="M3.97 10.72A5.4 5.4 0 0 1 3.68 9c0-.6.1-1.18.29-1.72V4.95H.96A9 9 0 0 0 0 9c0 1.45.35 2.83.96 4.05l3.01-2.33z"/><path fill="#EA4335" d="M9 3.58c1.32 0 2.5.45 3.44 1.35l2.58-2.58A9 9 0 0 0 .96 4.95l3.01 2.33C4.68 5.16 6.66 3.58 9 3.58z"/></svg>`;
@@ -37,33 +40,62 @@ function bindGoogle($) {
     });
 }
 
-const googleBlock = `
-    <div class="auth-divider"><span>또는</span></div>
-    <button type="button" class="auth-button is-google" data-google>${GOOGLE_ICON}<span>구글로 계속하기</span></button>`;
 
-export function loginView(container, { flash }) {
-    const $ = render(container, shell("로그인", `
+function inAppNotice(inApp) {
+    const target = auth.appUrl(returnTo.get() ?? "#/groups");
+    const external = externalOpenUrl(inApp, target);
+    return `
+        <div class="inapp-notice">
+            <p><strong>앱 안의 브라우저에서는 구글 로그인이 막혀 있어요.</strong></p>
+            ${external
+                ? `<p>아래 버튼을 눌러 ${inApp.os === "ios" ? "Safari" : "크롬"} 같은 기본 브라우저로 열어 주세요.</p>
+                   <a class="auth-button is-primary" href="${escapeHtml(external)}">기본 브라우저로 열기</a>`
+                : `<p>화면 오른쪽 위나 아래의 <strong>⋯ 메뉴</strong>에서 <strong>"Safari로 열기"</strong>(또는 "브라우저로 열기")를 눌러 주세요.</p>
+                   <button type="button" class="auth-button" data-copy-link>링크 복사해서 직접 열기</button>
+                   <p class="auth-note" data-copy-result></p>`}
+        </div>`;
+}
+
+// 로컬 테스트 서버(npm run dev)에서만 보이는 이메일 로그인 – 실제 서비스는 구글 로그인만 쓴다
+const devEmailLogin = `
+    <details class="dev-login">
+        <summary>개발용 이메일 로그인 (로컬에서만 보임)</summary>
         <form class="auth-form" novalidate>
             ${emailField()}
             ${passwordField("password", "비밀번호", "current-password")}
-            <p class="auth-error" role="alert"></p>
-            <button type="submit" class="auth-button is-primary">로그인</button>
+            <p class="auth-error" data-dev-error role="alert"></p>
+            <button type="submit" class="auth-button">이메일로 로그인</button>
         </form>
-        ${googleBlock}
-        <nav class="auth-links">
-            <a href="#/signup">회원가입</a>
-            <a href="#/forgot">비밀번호 찾기</a>
-        </nav>`, { flash }));
+        <nav class="auth-links"><a href="#/signup">이메일로 가입</a><a href="#/forgot">비밀번호 찾기</a></nav>
+    </details>`;
 
-    handleSubmit($("form"), {
-        errorBox: $(".auth-error"),
-        toMessage: errorMessage,
-        onSubmit: async form => {
-            await auth.signIn(form.get("email").trim(), form.get("password"));
-            // 이동은 로그인 상태 변경 이벤트에서 처리
-        },
+export function loginView(container, { flash }) {
+    const inApp = detectInAppBrowser(navigator.userAgent);
+    const $ = render(container, shell("시작하기", `
+        ${inApp ? inAppNotice(inApp) : `
+        <button type="button" class="auth-button is-google" data-google>${GOOGLE_ICON}<span>구글 계정으로 계속하기</span></button>
+        <p class="auth-error" role="alert"></p>
+        <p class="auth-note">처음이면 자동으로 가입돼요. 구글 계정의 이름이 기본 닉네임이 돼요.</p>`}
+        ${import.meta.env.DEV ? devEmailLogin : ""}`,
+    { lead: "친구들과 함께 쓰는 공부 벌점 장부", flash }));
+
+    if (!inApp) bindGoogle($);
+
+    $("[data-copy-link]")?.addEventListener("click", async () => {
+        const ok = await copyText(auth.appUrl(returnTo.get() ?? "#/groups"));
+        $("[data-copy-result]").textContent = ok ? "복사했어요. Safari나 크롬 주소창에 붙여넣어 주세요." : "복사하지 못했어요.";
     });
-    bindGoogle($);
+
+    const devForm = $(".dev-login form");
+    if (devForm) {
+        handleSubmit(devForm, {
+            errorBox: $("[data-dev-error]"),
+            toMessage: errorMessage,
+            onSubmit: async form => {
+                await auth.signIn(form.get("email").trim(), form.get("password"));
+            },
+        });
+    }
 }
 
 export function signupView(container) {
@@ -75,7 +107,6 @@ export function signupView(container) {
             <p class="auth-error" role="alert"></p>
             <button type="submit" class="auth-button is-primary">가입하기</button>
         </form>
-        ${googleBlock}
         <nav class="auth-links">
             <a href="#/login">이미 계정이 있어요</a>
         </nav>`, { lead: "실제로 쓰는 이메일로 가입해 주세요. 인증 메일과 비밀번호 찾기 메일이 이 주소로 가요." }));
@@ -95,7 +126,6 @@ export function signupView(container) {
             checkEmailView(container, { email, kind: "signup" });
         },
     });
-    bindGoogle($);
 }
 
 export function checkEmailView(container, { email, kind }) {

@@ -667,3 +667,41 @@
         grid-template-columns: 1fr;
     }
 }
+
+/* ── 로그인 ── */
+
+.auth-button.is-google {
+    min-height: 48px;
+    font-size: 14px;
+}
+
+.inapp-notice {
+    display: grid;
+    gap: 10px;
+    padding: 14px;
+    border: 1px solid var(--warning);
+    border-radius: var(--radius);
+    color: var(--ink);
+    font-size: 13px;
+    line-height: 1.6;
+}
+
+.inapp-notice a.auth-button {
+    text-decoration: none;
+}
+
+.dev-login {
+    margin-top: 24px;
+    padding-top: 12px;
+    border-top: 1px dashed var(--faint);
+    color: var(--quiet);
+    font-size: 12px;
+}
+
+.dev-login summary {
+    cursor: pointer;
+}
+
+.dev-login .auth-form {
+    margin-top: 12px;
+}
